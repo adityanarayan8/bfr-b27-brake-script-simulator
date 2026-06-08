@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+._*
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Python (build tooling only; the site itself has no dependencies)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Local scratch
+*.log
+tmp/

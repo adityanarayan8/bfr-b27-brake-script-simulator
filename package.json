@@ -1,0 +1,11 @@
+{
+  "name": "b27-brake-tool",
+  "version": "1.0.0",
+  "description": "Berkeley Formula Racing B27 interactive brake system simulator",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node test/run.js",
+    "serve": "python3 -m http.server 8000"
+  }
+}
