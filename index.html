@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>B27 Brake Script Simulator</title>
+<meta name="description" content="Interactive brake system model for the Berkeley Formula Racing B27 car. Solves pedal force to lock up, deceleration and brake bias across speed, and compares component choices side by side.">
+<link rel="canonical" href="https://bfr-b27-brake-script-simulator.pages.dev/">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="B27 Brake Script Simulator">
+<meta property="og:description" content="Interactive brake system model for the Berkeley Formula Racing B27 car. Solves pedal force to lock up, deceleration and brake bias across speed.">
+<meta property="og:url" content="https://bfr-b27-brake-script-simulator.pages.dev/">
+<meta name="twitter:card" content="summary">
+
+<link rel="stylesheet" href="css/app.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23003262'/><circle cx='16' cy='16' r='9' fill='none' stroke='%23FDB515' stroke-width='3'/></svg>">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "B27 Brake Script Simulator",
+  "applicationCategory": "EngineeringApplication",
+  "description": "Interactive brake system model for the Berkeley Formula Racing B27 Formula SAE car. Solves pedal force to lock up, deceleration and brake bias across speed.",
+  "url": "https://bfr-b27-brake-script-simulator.pages.dev/",
+  "browserRequirements": "Requires JavaScript and a browser with HTML canvas support.",
+  "isAccessibleForFree": true,
+  "operatingSystem": "Any"
+}
+</script>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div class="brand-text">
+      <h1>B27 Brake Script Simulator</h1>
+      <p>Berkeley Formula Racing &middot; port of <code>brakescript_w_aero_B27.m</code></p>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button type="button" id="btn-share" class="btn">Copy shareable link</button>
+    <button type="button" id="btn-csv" class="btn">Export CSV</button>
+    <button type="button" id="btn-reset" class="btn btn-quiet">Reset to source values</button>
+  </div>
+</header>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<main class="layout">
+
+  <aside class="panel" id="panel">
+
+    <section class="block">
+      <h2 class="block-title">Configurations</h2>
+      <div id="config-list" class="config-list"></div>
+      <button type="button" id="btn-add-config" class="btn btn-wide">+ Add configuration</button>
+    </section>
+
+    <section class="block">
+      <label class="jump-label" for="jump-select">What do you want to change?</label>
+      <select id="jump-select" class="select select-wide">
+        <option value="">Jump to a section&hellip;</option>
+      </select>
+    </section>
+
+    <div id="sections"></div>
+
+  </aside>
+
+  <div class="content">
+
+    <section class="block" id="validation-block">
+      <h2 class="block-title">Validation</h2>
+      <div id="validation" class="validation"></div>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <h2 class="block-title">Plots</h2>
+        <div class="block-controls">
+          <label class="check"><input type="checkbox" id="chk-specbox"> Show spec box on plot</label>
+          <label class="check"><input type="checkbox" id="chk-manual-axis"> Manual y-axis</label>
+          <span id="manual-axis-fields" class="axis-fields" hidden>
+            <input type="number" id="axis-min" class="num num-tiny" step="1" aria-label="Y axis minimum">
+            <span class="axis-sep">to</span>
+            <input type="number" id="axis-max" class="num num-tiny" step="1" aria-label="Y axis maximum">
+          </span>
+          <select id="add-plot" class="select">
+            <option value="">Add a plot&hellip;</option>
+            <option value="torque">Brake torque vs speed</option>
+            <option value="pressure">Line pressure at lockup vs speed</option>
+            <option value="biasSweep">Bias sweep at event speed</option>
+            <option value="driverSweep">Driver weight sensitivity</option>
+          </select>
+        </div>
+      </div>
+      <div id="plots" class="plots"></div>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <h2 class="block-title">Optimize</h2>
+        <div class="block-controls">
+          <select id="opt-param" class="select"></select>
+          <button type="button" id="btn-optimize" class="btn btn-primary">Solve</button>
+        </div>
+      </div>
+      <p class="hint">
+        Finds the value that brings the front and rear pedal-force curves closest together at the
+        primary event speed, <strong>subject to both staying inside the goal band</strong>.
+        A result outside the band is never reported as a success.
+      </p>
+      <div id="optimizer-result"></div>
+    </section>
+
+    <section class="block">
+      <h2 class="block-title">Results at event speeds</h2>
+      <div id="results-table" class="table-wrap"></div>
+    </section>
+
+    <footer class="app-footer">
+      <p>
+        Canonical units are inches, pounds and mph, so every value here diffs directly against the
+        MATLAB workspace. Unit selectors convert at the widget only.
+      </p>
+      <p>
+        Physics in <code>js/solver.js</code>, each block cross-referenced to its line numbers in
+        <code>brakescript_w_aero_B27.m</code>. Parts catalogue in <code>js/components.js</code>.
+      </p>
+    </footer>
+
+  </div>
+</main>
+
+<script type="module" src="js/ui.js"></script>
+</body>
+</html>
