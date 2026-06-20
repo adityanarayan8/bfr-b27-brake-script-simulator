@@ -1,0 +1,4329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>B27 Brake Script Simulator</title>
+<meta name="description" content="Interactive brake system model for the Berkeley Formula Racing B27 car. Solves pedal force to lock up, deceleration and brake bias across speed, and compares component choices side by side.">
+<link rel="canonical" href="https://bfr-b27-brake-script-simulator.pages.dev/">
+
+<meta property="og:type" content="website">
+<meta property="og:title" content="B27 Brake Script Simulator">
+<meta property="og:description" content="Interactive brake system model for the Berkeley Formula Racing B27 car. Solves pedal force to lock up, deceleration and brake bias across speed.">
+<meta property="og:url" content="https://bfr-b27-brake-script-simulator.pages.dev/">
+<meta name="twitter:card" content="summary">
+
+<style>
+/* BFR B27 Brake System Simulator */
+
+:root {
+  --berkeley-blue: #003262;
+  --berkeley-blue-dark: #00223f;
+  --california-gold: #FDB515;
+  --gold-dark: #C4820E;
+  --founders-rock: #3B7EA1;
+
+  --ink: #1a1a1a;
+  --ink-soft: #55606a;
+  --ink-faint: #808a93;
+  --rule: #c8ccd0;
+  --rule-soft: #e2e5e8;
+  --paper: #ffffff;
+  --paper-alt: #f6f7f9;
+  --paper-sunk: #eef0f3;
+
+  --ok: #1F7A3D;
+  --warn: #9A6700;
+  --warn-bg: #FFF8E5;
+  --err: #B3261E;
+  --err-bg: #FDF0EF;
+
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--paper-sunk);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+code { font-family: var(--mono); font-size: 0.92em; }
+
+/* header */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--berkeley-blue);
+  color: #fff;
+  border-bottom: 3px solid var(--california-gold);
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+
+.brand-mark {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 3px solid var(--california-gold);
+  flex: none;
+}
+
+.brand-text h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.brand-text p {
+  margin: 1px 0 0;
+  font-size: 11px;
+  color: #b9c9d8;
+  font-family: var(--mono);
+}
+
+.brand-text code { color: var(--california-gold); }
+
+.header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* layout */
+
+.layout {
+  display: grid;
+  grid-template-columns: 380px minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px;
+  align-items: start;
+}
+
+@media (max-width: 1080px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .panel { position: static !important; max-height: none !important; }
+}
+
+.panel {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scroll-behavior: smooth;
+}
+
+.content { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.layout-single { grid-template-columns: minmax(0, 1fr); max-width: 640px; }
+
+.text-link { color: var(--berkeley-blue); font-weight: 550; }
+.text-link:hover { color: var(--gold-dark); }
+
+/* blocks */
+
+.block {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  padding: 10px 12px 12px;
+}
+
+.block-title {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--berkeley-blue);
+  border-bottom: 2px solid var(--berkeley-blue);
+  padding-bottom: 4px;
+}
+
+.block-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.block-head .block-title { flex: 1; min-width: 140px; }
+
+.block-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 4px;
+}
+
+.hint {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  line-height: 1.4;
+}
+
+/* controls */
+
+.btn {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 550;
+  padding: 4px 9px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+  cursor: pointer;
+  border-radius: 2px;
+}
+.btn:hover { background: rgba(255,255,255,0.2); }
+
+.block .btn, .content .btn {
+  border-color: var(--rule);
+  background: var(--paper-alt);
+  color: var(--ink);
+}
+.block .btn:hover, .content .btn:hover { background: var(--paper-sunk); }
+
+.btn-primary {
+  background: var(--berkeley-blue) !important;
+  color: #fff !important;
+  border-color: var(--berkeley-blue) !important;
+}
+.btn-primary:hover { background: var(--berkeley-blue-dark) !important; }
+
+.btn-quiet { opacity: 0.85; }
+.btn-wide { width: 100%; margin-top: 6px; }
+
+.btn-icon {
+  font-family: var(--mono);
+  font-size: 11px;
+  line-height: 1;
+  padding: 3px 6px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink-soft);
+  cursor: pointer;
+  border-radius: 2px;
+}
+.btn-icon:hover { background: var(--paper-sunk); color: var(--ink); }
+.btn-icon.danger:hover { background: var(--err-bg); color: var(--err); border-color: var(--err); }
+
+.select, .num, .text {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 5px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: var(--ink);
+  border-radius: 2px;
+  min-width: 0;
+}
+.select:focus, .num:focus, .text:focus {
+  outline: 2px solid var(--founders-rock);
+  outline-offset: -1px;
+}
+
+.select-wide { width: 100%; }
+.select-unit { width: auto; }
+.num { width: 72px; text-align: right; }
+.num-tiny { width: 58px; }
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  cursor: pointer;
+  user-select: none;
+}
+.check input { margin: 0; cursor: pointer; }
+
+.jump-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--berkeley-blue);
+  margin-bottom: 4px;
+}
+
+/* config list */
+
+.config-list { display: flex; flex-direction: column; gap: 4px; }
+
+.config-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--rule-soft);
+  background: var(--paper-alt);
+  cursor: pointer;
+}
+.config-row:hover { background: var(--paper-sunk); }
+
+.config-row.active {
+  background: #fff;
+  border-color: var(--berkeley-blue);
+  box-shadow: inset 3px 0 0 var(--berkeley-blue);
+}
+
+.config-swatch {
+  width: 12px; height: 12px;
+  flex: none;
+  border: 1px solid rgba(0,0,0,0.25);
+}
+
+.config-name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 1px 3px;
+  color: var(--ink);
+}
+.config-name:hover { border-color: var(--rule); background: #fff; }
+.config-name:focus { border-color: var(--founders-rock); background: #fff; outline: none; }
+
+.config-editing-tag {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--berkeley-blue);
+  font-weight: 700;
+  flex: none;
+}
+
+/* sections */
+
+.section {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+}
+
+.section + .section { margin-top: 10px; }
+
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  background: var(--paper-alt);
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--berkeley-blue);
+  text-align: left;
+}
+.section-head:hover { background: var(--paper-sunk); }
+.section-head:focus-visible { outline: 2px solid var(--founders-rock); outline-offset: -2px; }
+
+.section-heading { margin: 0; font-size: inherit; font-weight: inherit; }
+
+.section-caret {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink-faint);
+  transition: transform 0.12s;
+}
+.section.collapsed .section-caret { transform: rotate(-90deg); }
+.section.collapsed .section-body { display: none; }
+.section.collapsed .section-head { border-bottom: none; }
+
+.section-body { padding: 8px 10px 10px; }
+
+.section.flash { animation: flash 1s ease-out; }
+@keyframes flash {
+  0%   { box-shadow: 0 0 0 3px var(--california-gold); }
+  100% { box-shadow: 0 0 0 0 rgba(253,181,21,0); }
+}
+
+/* field */
+
+.field { margin-bottom: 9px; }
+.field:last-child { margin-bottom: 0; }
+
+.field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.field-label {
+  font-size: 11px;
+  color: var(--ink-soft);
+  font-weight: 550;
+}
+
+.field-inputs { display: flex; align-items: center; gap: 4px; flex: none; }
+
+.field-row { display: flex; align-items: center; gap: 6px; }
+
+input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  height: 16px;
+  accent-color: var(--berkeley-blue);
+  cursor: pointer;
+}
+
+.field-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--ink-faint);
+  margin-top: 1px;
+}
+
+.derived {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-soft);
+  background: var(--paper-alt);
+  border-left: 2px solid var(--california-gold);
+  padding: 3px 6px;
+  margin-top: 6px;
+}
+.derived strong { color: var(--ink); font-weight: 600; }
+
+/* spec block */
+
+.spec-block {
+  border: 1px solid var(--rule-soft);
+  background: var(--paper-alt);
+  padding: 6px 8px;
+  margin: 6px 0 8px;
+}
+
+.spec-block table { width: 100%; border-collapse: collapse; }
+.spec-block td {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 0;
+  color: var(--ink-soft);
+}
+.spec-block td:last-child { text-align: right; color: var(--ink); }
+
+.compat-warn {
+  font-size: 10px;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-left: 2px solid var(--warn);
+  padding: 4px 6px;
+  margin: 6px 0;
+}
+
+/* event speeds */
+
+.event-list { display: flex; flex-direction: column; gap: 3px; }
+
+.event-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.event-row .primary-tag {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--berkeley-blue);
+  font-weight: 700;
+}
+
+/* validation */
+
+.validation { display: flex; flex-direction: column; gap: 4px; }
+
+.issue {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  font-size: 11px;
+  padding: 5px 7px;
+  border-left: 3px solid;
+  line-height: 1.4;
+}
+.issue-warn { background: var(--warn-bg); border-color: var(--warn); color: #6b4700; }
+.issue-error { background: var(--err-bg); border-color: var(--err); color: #7d1a15; }
+.issue-ok { background: #F1F8F3; border-color: var(--ok); color: #14532a; }
+
+.issue-tag {
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex: none;
+  padding-top: 1px;
+}
+
+.issue-jump {
+  margin-left: auto;
+  flex: none;
+  font-size: 10px;
+  background: none;
+  border: none;
+  border-bottom: 1px dotted currentColor;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+/* plots */
+
+.plots { display: flex; flex-direction: column; gap: 12px; }
+
+.plot-card { border: 1px solid var(--rule); background: var(--paper); }
+.sweep-card { margin-top: 10px; }
+
+.plot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  background: var(--paper-alt);
+  border-bottom: 1px solid var(--rule);
+}
+
+.plot-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--berkeley-blue);
+}
+
+.plot-actions { display: flex; gap: 5px; }
+
+.plot-canvas-wrap { padding: 6px; }
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 420px;
+  cursor: crosshair;
+}
+
+canvas.short { height: 300px; }
+
+/* table */
+
+.table-wrap { overflow-x: auto; }
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+table.data th {
+  text-align: right;
+  font-weight: 700;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--berkeley-blue);
+  border-bottom: 2px solid var(--berkeley-blue);
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+table.data th:first-child,
+table.data td:first-child { text-align: left; }
+
+table.data td {
+  text-align: right;
+  padding: 3px 7px;
+  border-bottom: 1px solid var(--rule-soft);
+  white-space: nowrap;
+}
+
+table.data tbody tr:hover { background: var(--paper-alt); }
+
+.cell-swatch {
+  display: inline-block;
+  width: 9px; height: 9px;
+  margin-right: 5px;
+  vertical-align: -1px;
+  border: 1px solid rgba(0,0,0,0.25);
+}
+
+.in-band { color: var(--ok); font-weight: 600; }
+.out-band { color: var(--err); font-weight: 600; }
+
+/* optimizer */
+
+.opt-result { border: 1px solid var(--rule); margin-top: 8px; }
+
+.opt-verdict {
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  border-left: 4px solid;
+}
+.opt-verdict.ok { background: #F1F8F3; border-color: var(--ok); }
+.opt-verdict.fail { background: var(--err-bg); border-color: var(--err); }
+
+.opt-verdict h3 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.opt-verdict.ok h3 { color: var(--ok); }
+.opt-verdict.fail h3 { color: var(--err); }
+
+.opt-numbers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.opt-stat {
+  flex: 1 1 120px;
+  padding: 6px 10px;
+  border-right: 1px solid var(--rule-soft);
+}
+.opt-stat:last-child { border-right: none; }
+
+.opt-stat .k {
+  display: block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  margin-bottom: 1px;
+}
+.opt-stat .v {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.opt-actions { padding: 7px 10px; border-top: 1px solid var(--rule); background: var(--paper-alt); }
+
+.opt-fallback {
+  border-top: 1px solid var(--rule);
+  padding: 7px 10px;
+  font-size: 11px;
+  color: var(--ink-soft);
+  background: var(--paper-alt);
+}
+.opt-fallback strong { color: var(--ink); }
+
+/* toast */
+
+.toast {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  background: var(--berkeley-blue);
+  color: #fff;
+  font-size: 12px;
+  padding: 7px 14px;
+  border-left: 3px solid var(--california-gold);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.16s, transform 0.16s;
+  z-index: 50;
+  max-width: 90vw;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* footer */
+
+.app-footer {
+  font-size: 10px;
+  color: var(--ink-faint);
+  line-height: 1.5;
+  padding: 4px 2px 12px;
+}
+.app-footer p { margin: 0 0 3px; }
+
+</style>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23003262'/><circle cx='16' cy='16' r='9' fill='none' stroke='%23FDB515' stroke-width='3'/></svg>">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "B27 Brake Script Simulator",
+  "applicationCategory": "EngineeringApplication",
+  "description": "Interactive brake system model for the Berkeley Formula Racing B27 Formula SAE car. Solves pedal force to lock up, deceleration and brake bias across speed.",
+  "url": "https://bfr-b27-brake-script-simulator.pages.dev/",
+  "browserRequirements": "Requires JavaScript and a browser with HTML canvas support.",
+  "isAccessibleForFree": true,
+  "operatingSystem": "Any"
+}
+</script>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <div class="brand-text">
+      <h1>B27 Brake Script Simulator</h1>
+      <p>Berkeley Formula Racing &middot; port of <code>brakescript_w_aero_B27.m</code> &middot; offline build</p>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button type="button" id="btn-share" class="btn">Copy shareable link</button>
+    <button type="button" id="btn-csv" class="btn">Export CSV</button>
+    <button type="button" id="btn-reset" class="btn btn-quiet">Reset to source values</button>
+  </div>
+</header>
+
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<main class="layout">
+
+  <aside class="panel" id="panel">
+
+    <section class="block">
+      <h2 class="block-title">Configurations</h2>
+      <div id="config-list" class="config-list"></div>
+      <button type="button" id="btn-add-config" class="btn btn-wide">+ Add configuration</button>
+    </section>
+
+    <section class="block">
+      <label class="jump-label" for="jump-select">What do you want to change?</label>
+      <select id="jump-select" class="select select-wide">
+        <option value="">Jump to a section&hellip;</option>
+      </select>
+    </section>
+
+    <div id="sections"></div>
+
+  </aside>
+
+  <div class="content">
+
+    <section class="block" id="validation-block">
+      <h2 class="block-title">Validation</h2>
+      <div id="validation" class="validation"></div>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <h2 class="block-title">Plots</h2>
+        <div class="block-controls">
+          <label class="check"><input type="checkbox" id="chk-specbox"> Show spec box on plot</label>
+          <label class="check"><input type="checkbox" id="chk-manual-axis"> Manual y-axis</label>
+          <span id="manual-axis-fields" class="axis-fields" hidden>
+            <input type="number" id="axis-min" class="num num-tiny" step="1" aria-label="Y axis minimum">
+            <span class="axis-sep">to</span>
+            <input type="number" id="axis-max" class="num num-tiny" step="1" aria-label="Y axis maximum">
+          </span>
+          <select id="add-plot" class="select">
+            <option value="">Add a plot&hellip;</option>
+            <option value="torque">Brake torque vs speed</option>
+            <option value="pressure">Line pressure at lockup vs speed</option>
+            <option value="biasSweep">Bias sweep at event speed</option>
+            <option value="driverSweep">Driver weight sensitivity</option>
+          </select>
+        </div>
+      </div>
+      <div id="plots" class="plots"></div>
+    </section>
+
+    <section class="block">
+      <div class="block-head">
+        <h2 class="block-title">Optimize</h2>
+        <div class="block-controls">
+          <select id="opt-param" class="select"></select>
+          <button type="button" id="btn-optimize" class="btn btn-primary">Solve</button>
+        </div>
+      </div>
+      <p class="hint">
+        Finds the value that brings the front and rear pedal-force curves closest together at the
+        primary event speed, <strong>subject to both staying inside the goal band</strong>.
+        A result outside the band is never reported as a success.
+      </p>
+      <div id="optimizer-result"></div>
+    </section>
+
+    <section class="block">
+      <h2 class="block-title">Results at event speeds</h2>
+      <div id="results-table" class="table-wrap"></div>
+    </section>
+
+    <footer class="app-footer">
+      <p>
+        Canonical units are inches, pounds and mph, so every value here diffs directly against the
+        MATLAB workspace. Unit selectors convert at the widget only.
+      </p>
+      <p>
+        Physics in <code>js/solver.js</code>, each block cross-referenced to its line numbers in
+        <code>brakescript_w_aero_B27.m</code>. Parts catalogue in <code>js/components.js</code>.
+      </p>
+    </footer>
+
+  </div>
+</main>
+
+<script>
+(function () {
+'use strict';
+const __M = {};
+
+/* ==== units.js ============================================================= */
+__M['units'] = (function () {
+  const MM_PER_IN = 25.4;
+  const KG_PER_LB = 0.45359237;
+  const N_PER_LBF = 4.4482216152605;
+  const KPH_PER_MPH = 1.609344;
+
+  const UNITS = {
+    length_in: {
+      canonical: 'in',
+      options: [
+        { id: 'in', label: 'in', toCanonical: (v) => v, fromCanonical: (v) => v, decimals: 3 },
+        {
+          id: 'mm',
+          label: 'mm',
+          toCanonical: (v) => v / MM_PER_IN,
+          fromCanonical: (v) => v * MM_PER_IN,
+          decimals: 2,
+        },
+      ],
+    },
+    length_mm: {
+      canonical: 'mm',
+      options: [
+        { id: 'mm', label: 'mm', toCanonical: (v) => v, fromCanonical: (v) => v, decimals: 2 },
+        {
+          id: 'in',
+          label: 'in',
+          toCanonical: (v) => v * MM_PER_IN,
+          fromCanonical: (v) => v / MM_PER_IN,
+          decimals: 4,
+        },
+      ],
+    },
+    weight_lb: {
+      canonical: 'lb',
+      options: [
+        { id: 'lb', label: 'lb', toCanonical: (v) => v, fromCanonical: (v) => v, decimals: 1 },
+        {
+          id: 'kg',
+          label: 'kg',
+          toCanonical: (v) => v / KG_PER_LB,
+          fromCanonical: (v) => v * KG_PER_LB,
+          decimals: 2,
+        },
+      ],
+    },
+    force_lbf: {
+      canonical: 'lbf',
+      options: [
+        { id: 'lbf', label: 'lbf', toCanonical: (v) => v, fromCanonical: (v) => v, decimals: 1 },
+        {
+          id: 'N',
+          label: 'N',
+          toCanonical: (v) => v / N_PER_LBF,
+          fromCanonical: (v) => v * N_PER_LBF,
+          decimals: 1,
+        },
+      ],
+    },
+    speed_mph: {
+      canonical: 'mph',
+      options: [
+        { id: 'mph', label: 'mph', toCanonical: (v) => v, fromCanonical: (v) => v, decimals: 1 },
+        {
+          id: 'kph',
+          label: 'kph',
+          toCanonical: (v) => v / KPH_PER_MPH,
+          fromCanonical: (v) => v * KPH_PER_MPH,
+          decimals: 1,
+        },
+      ],
+    },
+  };
+
+  function unitOption(family, unitId) {
+    const fam = UNITS[family];
+    if (!fam) return null;
+    return fam.options.find((o) => o.id === unitId) || fam.options[0];
+  }
+
+  function toDisplay(family, unitId, canonicalValue) {
+    const opt = unitOption(family, unitId);
+    return opt ? opt.fromCanonical(canonicalValue) : canonicalValue;
+  }
+
+  function toCanonical(family, unitId, displayValue) {
+    const opt = unitOption(family, unitId);
+    return opt ? opt.toCanonical(displayValue) : displayValue;
+  }
+
+  function fmt(value, decimals = 2) {
+    if (value === null || value === undefined || Number.isNaN(value)) return '-';
+    if (!Number.isFinite(value)) return '∞';
+    return value.toFixed(decimals);
+  }
+
+  return { KG_PER_LB, KPH_PER_MPH, MM_PER_IN, N_PER_LBF, UNITS, fmt, toCanonical, toDisplay, unitOption };
+})();
+
+/* ==== components.js ======================================================== */
+__M['components'] = (function () {
+  /**
+   * components.js - Parts catalogue. DATA ONLY; no logic or DOM manipulation.
+   *
+   * ADDING A PART
+   * Append an entry to the appropriate array below and open a pull request.
+   * Part numbers are not hardcoded elsewhere in the codebase, so adding a new
+   * caliper, master cylinder, pad, or rotor requires changes to this file only.
+   * Keep `id` stable once merged, as shareable links encode it (see js/share.js).
+   *
+   * Every default value in this file comes from `brakescript_w_aero_B27.m`, which
+   * corresponds to the "Car as built" configuration in the UI.
+   */
+
+  // Calipers
+  const FRONT_CALIPERS = [
+    {
+      id: 'isr-22-048',
+      name: 'ISR 22-048',
+      bore: 25,
+      pistons: 4,
+      type: 'opposed',
+      padFamily: 'isr',
+      discRange: [150, 250],
+      sweptHeight: 27,
+      spec: [
+        ['Pistons', '4 x 25 mm, opposed'],
+        ['Pad area', '14 cm²'],
+        ['Swept height', '27 mm'],
+        ['Disc diameter', '150 to 250 mm'],
+        ['Disc thickness', '4.6 to 5.0 mm'],
+        ['Mass with pads', '0.46 kg'],
+      ],
+    },
+    {
+      id: 'custom-front',
+      name: 'Custom front caliper',
+      custom: true,
+      bore: 25,
+      pistons: 4,
+      type: 'opposed',
+      padFamily: null,
+      discRange: null,
+      sweptHeight: null,
+      spec: [],
+    },
+  ];
+
+  const REAR_CALIPERS = [
+    {
+      id: 'wilwood-gp200',
+      name: 'Wilwood GP200',
+      bore: 31.75,
+      pistons: 2,
+      type: 'opposed',
+      padFamily: 'wilwood',
+      discRange: null,
+      sweptHeight: null,
+      spec: [
+        ['Pistons', '2 x 1.25 in, opposed'],
+        ['Piston area (one side)', '1.23 in²'],
+        ['Pad area', '1.83 in²'],
+        ['Rotor width', '0.25 in'],
+        ['Mass', '0.90 lb'],
+      ],
+    },
+    {
+      id: 'isr-22-049',
+      name: 'ISR 22-049',
+      bore: 25,
+      pistons: 2,
+      type: 'opposed',
+      padFamily: 'isr',
+      discRange: [150, 250],
+      sweptHeight: 27,
+      spec: [
+        ['Pistons', '2 x 25 mm, opposed'],
+        ['Pad area', '7 cm²'],
+        ['Swept height', '27 mm'],
+        ['Disc diameter', '150 to 250 mm'],
+        ['Mass', '0.29 kg'],
+      ],
+    },
+    {
+      id: 'custom-rear',
+      name: 'Custom rear caliper',
+      custom: true,
+      bore: 31.75,
+      pistons: 2,
+      type: 'opposed',
+      padFamily: null,
+      discRange: null,
+      sweptHeight: null,
+      spec: [],
+    },
+  ];
+
+  const PISTON_COUNTS = [2, 4, 6];
+  const CALIPER_TYPES = [
+    { id: 'opposed', name: 'Opposed' },
+    { id: 'floating', name: 'Floating' },
+  ];
+
+  // Master cylinders
+  const MASTER_CYLINDERS = [
+    { id: 'tilton-78-625', name: 'Tilton 78-625', bore: 0.625, boreMm: 15.875, stroke: 1.1 },
+    { id: 'tilton-78-700', name: 'Tilton 78-700', bore: 0.7, boreMm: 17.78, stroke: 1.1 },
+    { id: 'tilton-78-750', name: 'Tilton 78-750', bore: 0.75, boreMm: 19.05, stroke: 1.1 },
+    { id: 'tilton-78-812', name: 'Tilton 78-812', bore: 0.8125, boreMm: 20.65, stroke: 1.1 },
+    { id: 'tilton-78-875', name: 'Tilton 78-875', bore: 0.875, boreMm: 22.225, stroke: 1.1 },
+    { id: 'tilton-78-937', name: 'Tilton 78-937', bore: 0.937, boreMm: 23.8, stroke: 1.1 },
+    { id: 'tilton-78-1000', name: 'Tilton 78-1000', bore: 1.0, boreMm: 25.4, stroke: 1.1 },
+    { id: 'custom-mc', name: 'Custom', custom: true, bore: 0.625, boreMm: 15.875, stroke: 1.1 },
+  ];
+
+  const MC_BORES = MASTER_CYLINDERS.filter((m) => !m.custom).map((m) => m.bore);
+
+  function masterCylinderByBore(bore, tol = 1e-6) {
+    return MASTER_CYLINDERS.find((m) => !m.custom && Math.abs(m.bore - bore) <= tol) || null;
+  }
+
+  // Brake pads
+  const PADS = [
+    { id: 'ebc-gpfax', name: 'EBC GPFAX (ISR only)', mu: 0.7, family: 'isr' },
+    { id: 'bp-45', name: 'BP-45 (Wilwood compatible)', mu: 0.55, family: 'wilwood' },
+    { id: 'bp-40', name: 'BP-40 (Wilwood compatible)', mu: 0.5, family: 'wilwood' },
+    { id: 'bp-28', name: 'BP-28 (Wilwood compatible)', mu: 0.475, family: 'wilwood' },
+    { id: 'custom-pad', name: 'Custom pad', mu: 0.7, family: null, custom: true },
+  ];
+
+  function padById(id) {
+    return PADS.find((p) => p.id === id) || null;
+  }
+
+  function padCaliperWarning(pad, caliper) {
+    if (!pad || !caliper) return null;
+    if (!pad.family || !caliper.padFamily) return null;
+    if (pad.family === caliper.padFamily) return null;
+    return `${pad.name} is not a listed fit for the ${caliper.name}. Running anyway. Check pad backing plate and swept height before ordering.`;
+  }
+
+  // Rotors
+  const FRONT_ROTORS = [
+    { id: 'front-current', name: 'Current front rotor', od: 7.2, id_: 5.3 },
+    { id: 'front-custom', name: 'Custom', custom: true, od: 7.2, id_: 5.3 },
+  ];
+
+  const REAR_ROTORS = [
+    { id: 'rear-current', name: 'Current rear rotor', od: 6.85, id_: 5.3 },
+    { id: 'rear-custom', name: 'Custom', custom: true, od: 6.85, id_: 5.3 },
+  ];
+
+  // Driver weight
+  const DRIVER_WEIGHTS = [
+    { id: 'dw-170', name: '170 lb (current)', value: 170 },
+    { id: 'dw-130', name: '130 lb', value: 130 },
+    { id: 'dw-150', name: '150 lb', value: 150 },
+    { id: 'dw-200', name: '200 lb', value: 200 },
+    { id: 'dw-custom', name: 'Custom', custom: true, value: 170 },
+  ];
+
+  // Event speeds
+  const EVENT_SPEEDS = [
+    { id: 'ev-42', name: '42 mph (current)', value: 42, defaultOn: true },
+    { id: 'ev-30', name: '30 mph', value: 30, defaultOn: false },
+    { id: 'ev-50', name: '50 mph', value: 50, defaultOn: false },
+    { id: 'ev-60', name: '60 mph', value: 60, defaultOn: false },
+    { id: 'ev-custom', name: 'Custom', value: 45, defaultOn: false, custom: true },
+  ];
+
+  // Aero presets
+  const AERO_PRESETS = [
+    {
+      id: 'cl203-wing-1184',
+      name: 'Cl 2.03 on wing area 2.71785 m², rho 1.184',
+      Cl: 2.03,
+      wingArea: 2.71785,
+      airDensity: 1.184,
+    },
+    {
+      id: 'cl203-wing-1225',
+      name: 'Cl 2.03 on wing area 2.71785 m², rho 1.225',
+      Cl: 2.03,
+      wingArea: 2.71785,
+      airDensity: 1.225,
+    },
+    {
+      id: 'cl302-wing-1225',
+      name: 'Cl 3.02 on wing area 2.71785 m², rho 1.225',
+      Cl: 3.02,
+      wingArea: 2.71785,
+      airDensity: 1.225,
+    },
+    {
+      id: 'cl203-frontal-1225',
+      name: 'Cl 2.03 on frontal area 1.12007 m², rho 1.225',
+      Cl: 2.03,
+      wingArea: 1.12007,
+      airDensity: 1.225,
+    },
+    {
+      id: 'cl302-frontal-1225',
+      name: 'Cl 3.02 on frontal area 1.12007 m², rho 1.225',
+      Cl: 3.02,
+      wingArea: 1.12007,
+      airDensity: 1.225,
+    },
+    { id: 'aero-custom', name: 'Custom', custom: true, Cl: 2.03, wingArea: 2.71785, airDensity: 1.184 },
+  ];
+
+  // Downforce equations
+  const DOWNFORCE_EQUATIONS = [
+    {
+      id: 'plotted',
+      name: 'Previous, as plotted',
+      detail: '0.5 · 3 · 1.225 · v². Reproduces the reference plot the team validates against.',
+      usesAeroInputs: false,
+    },
+    {
+      id: 'plotted445',
+      name: 'Previous, with the 1/4.45 term',
+      detail: '0.5 · (1/4.45) · 3 · 1.225 · v². The commented-out equation in the source.',
+      usesAeroInputs: false,
+    },
+    {
+      id: 'clArea',
+      name: 'Updated, Cl and area',
+      detail: 'Cl · rho · v² · A · 0.5. The active equation in the source.',
+      usesAeroInputs: true,
+    },
+  ];
+
+  // Configuration colours
+  const CONFIG_COLORS = ['#003262', '#FDB515', '#C4820E', '#3B7EA1'];
+
+  return { AERO_PRESETS, CALIPER_TYPES, CONFIG_COLORS, DOWNFORCE_EQUATIONS, DRIVER_WEIGHTS, EVENT_SPEEDS, FRONT_CALIPERS, FRONT_ROTORS, MASTER_CYLINDERS, MC_BORES, PADS, PISTON_COUNTS, REAR_CALIPERS, REAR_ROTORS, masterCylinderByBore, padById, padCaliperWarning };
+})();
+
+/* ==== solver.js ============================================================ */
+__M['solver'] = (function () {
+  const GS2FTS2 = 32.174;
+
+  const MPH2MPS = (5280 * 0.3048) / 3600;
+
+  const DECEL_TOLERANCE = 0.005;
+
+  const DECEL_GRID_DIVISIONS = 1000000;
+
+  function computeAreas(c) {
+    const frontMCArea = Math.pow(c.frontMC / 2, 2) * Math.PI;
+    const rearMCArea = Math.pow(c.rearMC / 2, 2) * Math.PI;
+
+    const frontCaliperArea =
+      c.frontCaliperNum * Math.pow(c.frontCaliper / 25.4 / 2, 2) * Math.PI;
+    const rearCaliperArea =
+      c.rearCaliperNum * Math.pow(c.rearCaliper / 25.4 / 2, 2) * Math.PI;
+
+    return { frontMCArea, rearMCArea, frontCaliperArea, rearCaliperArea };
+  }
+
+  function effectiveRotorRadius(od, id) {
+    return (od + id) / 4;
+  }
+
+  function computeBias(c) {
+    const { frontMCArea, rearMCArea, frontCaliperArea, rearCaliperArea } =
+      computeAreas(c);
+
+    const frontTotal =
+      (c.pedalRatio / frontMCArea) *
+      frontCaliperArea *
+      effectiveRotorRadius(c.frontRotorOD, c.frontRotorID) *
+      c.biasBarFrontBias;
+
+    const rearTotal =
+      (c.pedalRatio / rearMCArea) *
+      rearCaliperArea *
+      effectiveRotorRadius(c.rearRotorOD, c.rearRotorID) *
+      (1 - c.biasBarFrontBias);
+
+    const effectiveBrakeBias = rearTotal / (frontTotal + rearTotal);
+
+    return { frontTotal, rearTotal, effectiveBrakeBias };
+  }
+
+  function makeTireMu(c) {
+    return (Fz) => (c.tireA - c.tireB * Fz) * c.tireScale1 * c.tireScale2;
+  }
+
+  const DOWNFORCE_MODES = {
+    PLOTTED: 'plotted',
+    PLOTTED_445: 'plotted445',
+    CL_AREA: 'clArea',
+  };
+
+  function makeDownforce(c) {
+    const mode = c.downforceMode;
+    return (vMph) => {
+      const v = vMph * MPH2MPS;
+      switch (mode) {
+        case DOWNFORCE_MODES.PLOTTED:
+          return 0.5 * 3 * 1.225 * v * v;
+        case DOWNFORCE_MODES.PLOTTED_445:
+          return 0.5 * (1 / 4.45) * 3 * 1.225 * v * v;
+        case DOWNFORCE_MODES.CL_AREA:
+        default:
+          return c.Cl * c.airDensity * v * v * c.wingArea * 0.5;
+      }
+    };
+  }
+
+  function makeCp(c) {
+    const travel = c.cpStatic - c.cpAtMaxDecel;
+    return (decelGsAboveOneG) =>
+      c.cpStatic - decelGsAboveOneG * (travel / c.maxDecelGs);
+  }
+
+  function evaluateDecel(decelerationGuess, k, downForceAtSpeed) {
+    const dynamicWeightTransfer =
+      (k.total_mass * decelerationGuess * k.centerGravityZ) / k.wheelBase;
+
+    let frontNormalForce;
+    let rearNormalForce;
+    let cpVal;
+
+    if (k.variableCP) {
+      cpVal = k.cp(decelerationGuess / GS2FTS2 - 1);
+      const weightFrontAero = k.weightFront + downForceAtSpeed * (1 - cpVal);
+      const weightRearAero = k.weightRear + downForceAtSpeed * cpVal;
+      frontNormalForce = weightFrontAero + dynamicWeightTransfer;
+      rearNormalForce = weightRearAero - dynamicWeightTransfer;
+    } else {
+      cpVal = k.cpFixed;
+      frontNormalForce =
+        k.weightFront + downForceAtSpeed * (1 - k.cpFixed) + dynamicWeightTransfer;
+      rearNormalForce =
+        k.weightRear + downForceAtSpeed * k.cpFixed - dynamicWeightTransfer;
+    }
+
+    let frontTireGrip = k.tireMu(frontNormalForce / 2) * (frontNormalForce / 2);
+    let rearTireGrip = k.tireMu(rearNormalForce / 2) * (rearNormalForce / 2);
+
+    const gripRatio = rearTireGrip / (frontTireGrip + rearTireGrip);
+    const newFirstLock = gripRatio >= k.effectiveBrakeBias ? 1 : 0;
+
+    const frontTireGripLimited =
+      frontTireGrip * newFirstLock +
+      rearTireGrip * (1 - newFirstLock) * (1 / k.effectiveBrakeBias - 1);
+    const rearTireGripLimited =
+      rearTireGrip * (1 - newFirstLock) +
+      frontTireGripLimited *
+        newFirstLock *
+        (1 / (1 - k.effectiveBrakeBias) - 1);
+
+    frontTireGrip = frontTireGripLimited;
+    rearTireGrip = rearTireGripLimited;
+
+    const decelerationFromTire =
+      (2 * frontTireGrip + 2 * rearTireGrip) / k.total_mass;
+
+    return {
+      decelerationFromTire,
+      dynamicWeightTransfer,
+      frontNormalForce,
+      rearNormalForce,
+      cpVal,
+      newFirstLock,
+      frontTireGrip,
+      rearTireGrip,
+    };
+  }
+
+  function makeKernel(c) {
+    const { frontTotal, rearTotal, effectiveBrakeBias } = computeBias(c);
+    const weight = c.carWeight + c.driverWeight;
+
+    return {
+      total_mass: weight / GS2FTS2,
+      weight,
+      weightFront: weight * (1 - c.rearBias),
+      weightRear: weight * c.rearBias,
+      centerGravityZ: c.centerGravityZ,
+      wheelBase: c.wheelBase,
+      variableCP: c.variableCP,
+      cpFixed: c.cpFixed,
+      cp: makeCp(c),
+      tireMu: makeTireMu(c),
+      effectiveBrakeBias,
+      frontTotal,
+      rearTotal,
+    };
+  }
+
+  function findDecelBruteForce(k, downForceAtSpeed, lastDecel, maxBrakingGuess) {
+    const maxD = (maxBrakingGuess - 1) * DECEL_GRID_DIVISIONS;
+    for (let D = 1; D <= maxD; D++) {
+      const decelerationGuess =
+        (D / DECEL_GRID_DIVISIONS) * GS2FTS2 + lastDecel;
+      const r = evaluateDecel(decelerationGuess, k, downForceAtSpeed);
+      if (Math.abs(decelerationGuess - r.decelerationFromTire) <= DECEL_TOLERANCE) {
+        return { converged: true, decelerationGuess, ...r };
+      }
+    }
+    return { converged: false };
+  }
+
+  function findDecelFast(k, downForceAtSpeed, lastDecel, maxBrakingGuess) {
+    const maxD = Math.floor((maxBrakingGuess - 1) * DECEL_GRID_DIVISIONS);
+    if (maxD < 1) return { converged: false };
+
+    const gridAt = (D) => (D / DECEL_GRID_DIVISIONS) * GS2FTS2 + lastDecel;
+    const residualAt = (D) => {
+      const g = gridAt(D);
+      const r = evaluateDecel(g, k, downForceAtSpeed);
+      return { residual: r.decelerationFromTire - g, g, r };
+    };
+
+    const last = residualAt(maxD);
+    if (last.residual > DECEL_TOLERANCE) return { converged: false };
+
+    let lo = 1;
+    let hi = maxD;
+    while (lo < hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (residualAt(mid).residual <= DECEL_TOLERANCE) hi = mid;
+      else lo = mid + 1;
+    }
+
+    const hit = residualAt(lo);
+    if (Math.abs(hit.residual) > DECEL_TOLERANCE) return { converged: false };
+
+    return { converged: true, decelerationGuess: hit.g, ...hit.r };
+  }
+
+  function solve(c, opts = {}) {
+    const search = opts.search === 'brute' ? findDecelBruteForce : findDecelFast;
+    const k = makeKernel(c);
+    const downforceFn = makeDownforce(c);
+    const tireMu = k.tireMu;
+
+    const n = c.topSpeed + 1;
+    const speeds = new Array(n);
+    const deceleration = new Array(n).fill(0);
+    const lockFront = new Array(n).fill(0);
+    const converged = new Array(n).fill(false);
+    const frontNormForce = new Array(n).fill(0);
+    const rearNormForce = new Array(n).fill(0);
+    const dynWeight = new Array(n).fill(0);
+    const downforce = new Array(n).fill(0);
+    const cpValues = new Array(n).fill(0);
+
+    let lastDecel = GS2FTS2;
+
+    for (let i = 0; i < n; i++) {
+      const v = i;
+      speeds[i] = v;
+      const df = downforceFn(v);
+      downforce[i] = df;
+
+      const res = search(k, df, lastDecel, c.maxBrakingGuess);
+
+      if (res.converged) {
+        lastDecel = res.decelerationGuess;
+        frontNormForce[i] = res.frontNormalForce;
+        rearNormForce[i] = res.rearNormalForce;
+        deceleration[i] = res.decelerationGuess / GS2FTS2;
+        lockFront[i] = res.newFirstLock;
+        dynWeight[i] = res.dynamicWeightTransfer;
+        cpValues[i] = res.cpVal;
+        converged[i] = true;
+      }
+    }
+
+    const frontPedalForce = new Array(n).fill(0);
+    const rearPedalForce = new Array(n).fill(0);
+    const frontTorque = new Array(n).fill(0);
+    const rearTorque = new Array(n).fill(0);
+    const frontLinePressure = new Array(n).fill(0);
+    const rearLinePressure = new Array(n).fill(0);
+
+    const { frontMCArea, rearMCArea } = computeAreas(c);
+
+    for (let i = 0; i < n; i++) {
+      if (!converged[i]) continue;
+      const fN = frontNormForce[i];
+      const rN = rearNormForce[i];
+
+      frontPedalForce[i] =
+        (fN * tireMu(fN / 2) * c.tireRad) /
+        (c.numFrontBrakes * k.frontTotal * c.frontRotorMu);
+      rearPedalForce[i] =
+        (rN * tireMu(rN / 2) * c.tireRad) /
+        (c.numRearBrakes * k.rearTotal * c.rearRotorMu);
+
+      frontTorque[i] = tireMu(fN / 2) * (fN / 2) * (c.tireRad / 12);
+      rearTorque[i] = tireMu(rN / 2) * (rN / 2) * (c.tireRad / 12);
+
+      frontLinePressure[i] =
+        (frontPedalForce[i] * c.pedalRatio * c.biasBarFrontBias) / frontMCArea;
+      rearLinePressure[i] =
+        (rearPedalForce[i] * c.pedalRatio * (1 - c.biasBarFrontBias)) / rearMCArea;
+    }
+
+    return {
+      speeds,
+      deceleration,
+      lockFront,
+      converged,
+      frontNormForce,
+      rearNormForce,
+      dynWeight,
+      downforce,
+      cpValues,
+      frontPedalForce,
+      rearPedalForce,
+      frontTorque,
+      rearTorque,
+      frontLinePressure,
+      rearLinePressure,
+      effectiveBrakeBias: k.effectiveBrakeBias,
+      frontTotal: k.frontTotal,
+      rearTotal: k.rearTotal,
+      weight: k.weight,
+      weightFront: k.weightFront,
+      weightRear: k.weightRear,
+      frontRotorRadius: effectiveRotorRadius(c.frontRotorOD, c.frontRotorID),
+      rearRotorRadius: effectiveRotorRadius(c.rearRotorOD, c.rearRotorID),
+      failedSpeeds: speeds.filter((_, i) => !converged[i]),
+    };
+  }
+
+  function sampleAt(result, series, speedMph) {
+    const s = result.speeds;
+    if (speedMph <= s[0]) return result.converged[0] ? series[0] : null;
+    const lastIdx = s.length - 1;
+    if (speedMph >= s[lastIdx])
+      return result.converged[lastIdx] ? series[lastIdx] : null;
+
+    const i = Math.floor(speedMph);
+    const j = Math.min(i + 1, lastIdx);
+    if (!result.converged[i] || !result.converged[j]) return null;
+    const t = speedMph - i;
+    return series[i] * (1 - t) + series[j] * t;
+  }
+
+  return { DECEL_GRID_DIVISIONS, DECEL_TOLERANCE, DOWNFORCE_MODES, GS2FTS2, MPH2MPS, computeAreas, computeBias, effectiveRotorRadius, findDecelBruteForce, findDecelFast, makeCp, makeDownforce, makeTireMu, sampleAt, solve };
+})();
+
+/* ==== plots.js ============================================================= */
+__M['plots'] = (function () {
+  const BERKELEY_BLUE = '#003262';
+  const CALIFORNIA_GOLD = '#FDB515';
+  const INK = '#1a1a1a';
+  const RULE = '#c8ccd0';
+  const GRID = '#e6e9ec';
+  const PAPER = '#ffffff';
+  const MONO = '11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  const MONO_SMALL = '10px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
+  const SANS_BOLD = '600 13px ui-sans-serif, -apple-system, "Helvetica Neue", sans-serif';
+
+  function niceStep(range, targetTicks) {
+    if (range <= 0 || !Number.isFinite(range)) return 1;
+    const raw = range / Math.max(1, targetTicks);
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const norm = raw / mag;
+    let step;
+    if (norm <= 1) step = 1;
+    else if (norm <= 2) step = 2;
+    else if (norm <= 2.5) step = 2.5;
+    else if (norm <= 5) step = 5;
+    else step = 10;
+    return step * mag;
+  }
+
+  function ticksFor(min, max, targetTicks = 6) {
+    const step = niceStep(max - min, targetTicks);
+    const first = Math.ceil(min / step) * step;
+    const out = [];
+    for (let t = first; t <= max + step * 1e-9; t += step) {
+      out.push(Math.abs(t) < step * 1e-9 ? 0 : Number(t.toFixed(10)));
+    }
+    return out;
+  }
+
+  function tickLabel(v, step) {
+    const decimals = step >= 1 ? 0 : Math.min(6, Math.ceil(-Math.log10(step)));
+    return v.toFixed(decimals);
+  }
+
+  class Chart {
+    constructor(canvas) {
+      this.canvas = canvas;
+      this.ctx = canvas.getContext('2d');
+      this.spec = null;
+      this.layout = null;
+      this.hover = null;
+      this.showSpecBox = false;
+
+      this._onMove = (e) => {
+        if (!this.layout || !this.spec) return;
+        const rect = this.canvas.getBoundingClientRect();
+        const px = e.clientX - rect.left;
+        const py = e.clientY - rect.top;
+        const L = this.layout;
+        if (px < L.left || px > L.right || py < L.top || py > L.bottom) {
+          if (this.hover !== null) {
+            this.hover = null;
+            this.draw();
+          }
+          return;
+        }
+        this.hover = { px, py, x: L.xInv(px) };
+        this.draw();
+      };
+      this._onLeave = () => {
+        if (this.hover !== null) {
+          this.hover = null;
+          this.draw();
+        }
+      };
+      canvas.addEventListener('mousemove', this._onMove);
+      canvas.addEventListener('mouseleave', this._onLeave);
+    }
+
+    destroy() {
+      this.canvas.removeEventListener('mousemove', this._onMove);
+      this.canvas.removeEventListener('mouseleave', this._onLeave);
+    }
+
+    setSpec(spec) {
+      this.spec = spec;
+      this.draw();
+    }
+
+    _resize() {
+      const dpr = window.devicePixelRatio || 1;
+      const cssW = this.canvas.clientWidth || 700;
+      const cssH = this.canvas.clientHeight || 420;
+      if (this.canvas.width !== Math.round(cssW * dpr) || this.canvas.height !== Math.round(cssH * dpr)) {
+        this.canvas.width = Math.round(cssW * dpr);
+        this.canvas.height = Math.round(cssH * dpr);
+      }
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { w: cssW, h: cssH };
+    }
+
+    _extent() {
+      const s = this.spec;
+      let xMin = Infinity, xMax = -Infinity, yMin = Infinity, yMax = -Infinity;
+
+      for (const ser of s.series) {
+        for (const [x, y] of ser.points) {
+          if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+          if (x < xMin) xMin = x;
+          if (x > xMax) xMax = x;
+          if (y < yMin) yMin = y;
+          if (y > yMax) yMax = y;
+        }
+      }
+      for (const b of s.bands || []) {
+        yMin = Math.min(yMin, b.y0);
+        yMax = Math.max(yMax, b.y1);
+      }
+      for (const v of s.vlines || []) {
+        if (Number.isFinite(v.x)) {
+          xMin = Math.min(xMin, v.x);
+          xMax = Math.max(xMax, v.x);
+        }
+      }
+
+      if (!Number.isFinite(xMin)) { xMin = 0; xMax = 1; }
+      if (!Number.isFinite(yMin)) { yMin = 0; yMax = 1; }
+      if (xMax === xMin) { xMax = xMin + 1; }
+      if (yMax === yMin) { yMax = yMin + 1; }
+
+      const yPad = (yMax - yMin) * 0.08;
+      yMin -= yPad;
+      yMax += yPad;
+
+      if (s.xOverride) { xMin = s.xOverride.min; xMax = s.xOverride.max; }
+      if (s.yOverride) { yMin = s.yOverride.min; yMax = s.yOverride.max; }
+
+      return { xMin, xMax, yMin, yMax };
+    }
+
+    _legendEntries() {
+      const out = [];
+      for (const s of this.spec.series) {
+        if (s.hideFromLegend || !s.points.length) continue;
+        out.push({ name: s.name, color: s.color, dash: s.dash, kind: s.type === 'scatter' ? 'scatter' : 'line' });
+      }
+      for (const b of this.spec.bands || []) {
+        if (!b.label) continue;
+        out.push({ name: b.label, color: b.color || 'rgba(253, 181, 21, 0.45)', kind: 'band' });
+      }
+      for (const v of this.spec.vlines || []) {
+        if (!v.legendLabel) continue;
+        out.push({ name: v.legendLabel, color: v.color || INK, dash: v.dash, kind: 'vline' });
+      }
+      return out;
+    }
+
+    draw() {
+      if (!this.spec) return;
+      const { w, h } = this._resize();
+      const ctx = this.ctx;
+      const s = this.spec;
+
+      ctx.fillStyle = PAPER;
+      ctx.fillRect(0, 0, w, h);
+
+      const legend = this._legendEntries();
+      const legendRows = Math.ceil(legend.length / 3);
+      const legendH = legend.length ? legendRows * 16 + 8 : 0;
+
+      const L = {
+        left: 62,
+        right: w - 16,
+        top: s.title ? 34 : 14,
+        bottom: h - 40 - legendH,
+      };
+      if (L.bottom <= L.top + 20) L.bottom = L.top + 20;
+
+      const { xMin, xMax, yMin, yMax } = this._extent();
+      L.xMin = xMin; L.xMax = xMax; L.yMin = yMin; L.yMax = yMax;
+      L.x = (v) => L.left + ((v - xMin) / (xMax - xMin)) * (L.right - L.left);
+      L.y = (v) => L.bottom - ((v - yMin) / (yMax - yMin)) * (L.bottom - L.top);
+      L.xInv = (px) => xMin + ((px - L.left) / (L.right - L.left)) * (xMax - xMin);
+      this.layout = L;
+
+      if (s.title) {
+        ctx.fillStyle = BERKELEY_BLUE;
+        ctx.font = SANS_BOLD;
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(s.title, L.left, 20);
+      }
+
+      for (const b of s.bands || []) {
+        const y1 = L.y(Math.max(b.y0, b.y1));
+        const y2 = L.y(Math.min(b.y0, b.y1));
+        ctx.fillStyle = b.color || 'rgba(253, 181, 21, 0.16)';
+        ctx.fillRect(L.left, y1, L.right - L.left, y2 - y1);
+        ctx.strokeStyle = 'rgba(196, 130, 14, 0.55)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 3]);
+        ctx.beginPath();
+        ctx.moveTo(L.left, y1); ctx.lineTo(L.right, y1);
+        ctx.moveTo(L.left, y2); ctx.lineTo(L.right, y2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      const xStep = niceStep(xMax - xMin, 8);
+      const yStep = niceStep(yMax - yMin, 6);
+      const xTicks = ticksFor(xMin, xMax, 8);
+      const yTicks = ticksFor(yMin, yMax, 6);
+
+      ctx.strokeStyle = GRID;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (const t of xTicks) {
+        const px = Math.round(L.x(t)) + 0.5;
+        ctx.moveTo(px, L.top); ctx.lineTo(px, L.bottom);
+      }
+      for (const t of yTicks) {
+        const py = Math.round(L.y(t)) + 0.5;
+        ctx.moveTo(L.left, py); ctx.lineTo(L.right, py);
+      }
+      ctx.stroke();
+
+      ctx.fillStyle = '#55606a';
+      ctx.font = MONO_SMALL;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      for (const t of xTicks) ctx.fillText(tickLabel(t, xStep), L.x(t), L.bottom + 6);
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      for (const t of yTicks) ctx.fillText(tickLabel(t, yStep), L.left - 8, L.y(t));
+
+      for (const v of s.vlines || []) {
+        const px = Math.round(L.x(v.x)) + 0.5;
+        ctx.strokeStyle = v.color || INK;
+        ctx.lineWidth = 1.25;
+        ctx.setLineDash(v.dash ? [5, 4] : []);
+        ctx.beginPath();
+        ctx.moveTo(px, L.top); ctx.lineTo(px, L.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        if (v.label) {
+          ctx.save();
+          ctx.translate(px + 4, L.top + 4);
+          ctx.fillStyle = v.color || INK;
+          ctx.font = MONO_SMALL;
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'top';
+          ctx.fillText(v.label, 0, 0);
+          ctx.restore();
+        }
+      }
+
+      for (const ser of s.series) {
+        if (!ser.points.length) continue;
+        ctx.strokeStyle = ser.color;
+        ctx.fillStyle = ser.color;
+        ctx.lineWidth = ser.width || 2;
+
+        if (ser.type === 'scatter') {
+          const r = ser.radius || 3.4;
+          for (const [x, y] of ser.points) {
+            ctx.beginPath();
+            ctx.arc(L.x(x), L.y(y), r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        } else {
+          ctx.setLineDash(ser.dash ? [7, 5] : []);
+          ctx.beginPath();
+          let started = false;
+          for (const [x, y] of ser.points) {
+            if (!Number.isFinite(x) || !Number.isFinite(y)) { started = false; continue; }
+            const px = L.x(x), py = L.y(y);
+            if (!started) { ctx.moveTo(px, py); started = true; }
+            else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
+      ctx.strokeStyle = RULE;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(L.left + 0.5, L.top + 0.5, L.right - L.left - 1, L.bottom - L.top - 1);
+
+      ctx.fillStyle = INK;
+      ctx.font = MONO;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'top';
+      if (s.xLabel) ctx.fillText(s.xLabel, (L.left + L.right) / 2, L.bottom + 20);
+      if (s.yLabel) {
+        ctx.save();
+        ctx.translate(14, (L.top + L.bottom) / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(s.yLabel, 0, 0);
+        ctx.restore();
+      }
+
+      if (legend.length) {
+        const colW = (L.right - L.left) / Math.min(3, legend.length);
+        ctx.font = MONO_SMALL;
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left';
+        legend.forEach((ser, i) => {
+          const col = i % 3;
+          const row = Math.floor(i / 3);
+          const lx = L.left + col * colW;
+          const ly = L.bottom + 38 + row * 16;
+          ctx.strokeStyle = ser.color;
+          ctx.fillStyle = ser.color;
+          ctx.lineWidth = 2;
+          if (ser.kind === 'scatter') {
+            ctx.beginPath();
+            ctx.arc(lx + 9, ly, 3.4, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (ser.kind === 'band') {
+            ctx.fillStyle = 'rgba(253, 181, 21, 0.28)';
+            ctx.fillRect(lx, ly - 4, 18, 8);
+            ctx.strokeStyle = 'rgba(196, 130, 14, 0.75)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(lx + 0.5, ly - 3.5, 17, 7);
+          } else if (ser.kind === 'vline') {
+            ctx.setLineDash(ser.dash ? [3, 2] : []);
+            ctx.beginPath();
+            ctx.moveTo(lx + 9, ly - 5); ctx.lineTo(lx + 9, ly + 5);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          } else {
+            ctx.setLineDash(ser.dash ? [5, 4] : []);
+            ctx.beginPath();
+            ctx.moveTo(lx, ly); ctx.lineTo(lx + 18, ly);
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+          ctx.fillStyle = INK;
+          ctx.fillText(ser.name, lx + 24, ly);
+        });
+      }
+
+      if (this.showSpecBox && s.specBox && s.specBox.length) this._drawSpecBox(ctx, L, s.specBox);
+
+      if (this.hover) this._drawHover(ctx, L, s);
+    }
+
+    _drawSpecBox(ctx, L, boxes) {
+      const pad = 7;
+      const lineH = 12;
+      ctx.font = MONO_SMALL;
+
+      let bx = L.left + 10;
+      const by = L.top + 10;
+
+      for (const box of boxes) {
+        const lines = [];
+        if (box.heading) lines.push([box.heading, null]);
+        for (const [k, v] of box.rows) lines.push([k, v]);
+
+        let wLabel = 0;
+        let wValue = 0;
+        for (const [k, v] of lines) {
+          wLabel = Math.max(wLabel, ctx.measureText(k).width);
+          if (v !== null) wValue = Math.max(wValue, ctx.measureText(v).width);
+        }
+        const boxW = wLabel + (wValue ? wValue + 12 : 0) + pad * 2;
+        const boxH = lines.length * lineH + pad * 2;
+
+        ctx.fillStyle = 'rgba(255,255,255,0.94)';
+        ctx.fillRect(bx, by, boxW, boxH);
+        ctx.strokeStyle = RULE;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1);
+
+        ctx.textBaseline = 'top';
+        lines.forEach(([k, v], i) => {
+          const ly = by + pad + i * lineH;
+          ctx.textAlign = 'left';
+          ctx.fillStyle = v === null ? BERKELEY_BLUE : '#55606a';
+          ctx.fillText(k, bx + pad, ly);
+          if (v !== null) {
+            ctx.textAlign = 'right';
+            ctx.fillStyle = INK;
+            ctx.fillText(v, bx + boxW - pad, ly);
+          }
+        });
+
+        bx += boxW + 8;
+      }
+    }
+
+    _drawHover(ctx, L, s) {
+      const hx = this.hover.x;
+
+      let snapX = hx;
+      const ref = s.series.find((ser) => ser.points.length > 1);
+      if (ref) {
+        let best = Infinity;
+        for (const [x] of ref.points) {
+          const d = Math.abs(x - hx);
+          if (d < best) { best = d; snapX = x; }
+        }
+      }
+
+      const px = Math.round(L.x(snapX)) + 0.5;
+      ctx.strokeStyle = 'rgba(0,50,98,0.5)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(px, L.top); ctx.lineTo(px, L.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const dec = s.valueDecimals === undefined ? 1 : s.valueDecimals;
+      const rows = [];
+      for (const ser of s.series) {
+        if (!ser.points.length || ser.hideFromLegend) continue;
+        let hit = null;
+        let best = Infinity;
+        for (const [x, y] of ser.points) {
+          const d = Math.abs(x - snapX);
+          if (d < best) { best = d; hit = y; }
+        }
+        if (hit !== null && best <= Math.max(0.75, (L.xMax - L.xMin) / 200)) {
+          rows.push([ser.name, hit.toFixed(dec), ser.color]);
+          ctx.fillStyle = ser.color;
+          ctx.beginPath();
+          ctx.arc(px, L.y(hit), 3.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      if (!rows.length) return;
+
+      ctx.font = MONO_SMALL;
+      const header = `${s.xTipLabel || 'x'} = ${snapX.toFixed(s.xTipDecimals === undefined ? 0 : s.xTipDecimals)}`;
+      let wName = ctx.measureText(header).width;
+      let wVal = 0;
+      for (const [n, v] of rows) {
+        wName = Math.max(wName, ctx.measureText(n).width);
+        wVal = Math.max(wVal, ctx.measureText(v).width);
+      }
+      const pad = 7;
+      const lineH = 13;
+      const boxW = wName + wVal + 22 + pad * 2;
+      const boxH = (rows.length + 1) * lineH + pad * 2;
+
+      let bx = px + 12;
+      if (bx + boxW > L.right) bx = px - boxW - 12;
+      let by = L.top + 10;
+      if (this.hover.py > L.bottom - boxH - 20) by = L.top + 10;
+      else by = Math.min(this.hover.py + 12, L.bottom - boxH - 4);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.97)';
+      ctx.fillRect(bx, by, boxW, boxH);
+      ctx.strokeStyle = BERKELEY_BLUE;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1);
+
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = BERKELEY_BLUE;
+      ctx.fillText(header, bx + pad, by + pad);
+
+      rows.forEach(([n, v, c], i) => {
+        const ly = by + pad + (i + 1) * lineH;
+        ctx.fillStyle = c;
+        ctx.fillRect(bx + pad, ly + 4, 8, 3);
+        ctx.fillStyle = '#55606a';
+        ctx.textAlign = 'left';
+        ctx.fillText(n, bx + pad + 14, ly);
+        ctx.fillStyle = INK;
+        ctx.textAlign = 'right';
+        ctx.fillText(v, bx + boxW - pad, ly);
+      });
+    }
+
+    toPNG(filename) {
+      const dpr = 2;
+      const cssW = this.canvas.clientWidth || 700;
+      const cssH = this.canvas.clientHeight || 420;
+      const off = document.createElement('canvas');
+      off.width = cssW * dpr;
+      off.height = cssH * dpr;
+
+      const realCanvas = this.canvas;
+      const realCtx = this.ctx;
+      const hover = this.hover;
+      this.hover = null;
+      this.canvas = { getContext: () => off.getContext('2d'), clientWidth: cssW, clientHeight: cssH, width: off.width, height: off.height, addEventListener() {}, removeEventListener() {} };
+      this.ctx = off.getContext('2d');
+      this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const savedResize = this._resize;
+      this._resize = () => { this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); return { w: cssW, h: cssH }; };
+      this.draw();
+      this._resize = savedResize;
+      this.canvas = realCanvas;
+      this.ctx = realCtx;
+      this.hover = hover;
+      this.draw();
+
+      const link = document.createElement('a');
+      link.download = filename || 'plot.png';
+      link.href = off.toDataURL('image/png');
+      link.click();
+    }
+  }
+
+  function specBoxFor(values, result) {
+    return [
+      {
+        heading: 'Car Characteristics:',
+        rows: [
+          ['Weight', `${(values.carWeight + values.driverWeight).toFixed(0)} lbs`],
+          ['Rear Weight Bias', values.rearBias.toFixed(3)],
+          ['Wheel Base', `${values.wheelBase} in`],
+          ['CG Height', `${values.centerGravityZ} in`],
+          ['# of Rear Brakes', String(values.numRearBrakes)],
+          ['Tire Radius', `${values.tireRad} in`],
+          ['Front Rotor Mu', values.frontRotorMu.toFixed(3)],
+          ['Rear Rotor Mu', values.rearRotorMu.toFixed(3)],
+        ],
+      },
+      {
+        heading: 'Components:',
+        rows: [
+          ['Average Pedal Ratio', values.pedalRatio.toFixed(2)],
+          ['Front Pedal Bias', values.biasBarFrontBias.toFixed(3)],
+          ['Front MC Bore', `${values.frontMC} in`],
+          ['Front Rotor OD', `${values.frontRotorOD} in`],
+          ['Front Rotor ID', `${values.frontRotorID} in`],
+          ['Front Caliper Bore', `${values.frontCaliper} mm`],
+          ['Rear MC Bore', `${values.rearMC} in`],
+          ['Rear Rotor OD', `${values.rearRotorOD} in`],
+          ['Rear Rotor ID', `${values.rearRotorID} in`],
+          ['Rear Caliper Bore', `${values.rearCaliper} mm`],
+          ['Effective Brake Bias', result ? result.effectiveBrakeBias.toFixed(5) : '-'],
+        ],
+      },
+    ];
+  }
+
+  function seriesPoints(result, series) {
+    const out = [];
+    for (let i = 0; i < result.speeds.length; i++) {
+      if (!result.converged[i]) continue;
+      out.push([result.speeds[i], series[i]]);
+    }
+    return out;
+  }
+
+  function eventLines(values) {
+    return values.eventSpeeds
+      .filter((e) => e.on)
+      .map((e, i) => ({
+        x: e.value,
+        label: `${e.value} mph`,
+        legendLabel: i === 0 ? `event speed ${e.value} mph (primary)` : `event speed ${e.value} mph`,
+        color: i === 0 ? INK : '#7a838c',
+        dash: i !== 0,
+      }));
+  }
+
+  const multi = (solved) => solved.length > 1;
+
+  function pedalForceSpec(solved, values, opts = {}) {
+    const series = [];
+    for (const { entry, result } of solved) {
+      const tag = multi(solved) ? `${entry.name} ` : '';
+      series.push({
+        name: `${tag}front`,
+        color: entry.color,
+        dash: false,
+        points: seriesPoints(result, result.frontPedalForce),
+      });
+      series.push({
+        name: `${tag}rear`,
+        color: entry.color,
+        dash: true,
+        points: seriesPoints(result, result.rearPedalForce),
+      });
+    }
+    return {
+      title: 'Pedal Force to Lock Up',
+      xLabel: 'Speed (mph)',
+      yLabel: 'Pedal Force (lbf)',
+      xTipLabel: 'speed',
+      valueDecimals: 1,
+      series,
+      bands: [{
+        y0: values.goalLowerLimit,
+        y1: values.goalUpperLimit,
+        label: `goal range ${values.goalLowerLimit}–${values.goalUpperLimit} lbf`,
+      }],
+      vlines: eventLines(values),
+      specBox: opts.specBox,
+      yOverride: opts.yOverride || null,
+    };
+  }
+
+  function decelerationSpec(solved, values, opts = {}) {
+    const series = [];
+    for (const { entry, result } of solved) {
+      const tag = multi(solved) ? `${entry.name}: ` : '';
+      const frontPts = [];
+      const rearPts = [];
+      for (let i = 0; i < result.speeds.length; i++) {
+        if (!result.converged[i]) continue;
+        const pt = [result.speeds[i], result.deceleration[i]];
+        if (result.lockFront[i]) frontPts.push(pt);
+        else rearPts.push(pt);
+      }
+      if (frontPts.length) {
+        series.push({ name: `${tag}fronts lock first`, color: '#C4362B', type: 'scatter', points: frontPts });
+      }
+      if (rearPts.length) {
+        series.push({ name: `${tag}rears lock first`, color: entry.color, type: 'scatter', points: rearPts });
+      }
+    }
+    const bias = solved.length ? solved[0].result.effectiveBrakeBias : 0;
+    return {
+      title: `Vehicle Speed vs Deceleration, Accounting for Tire Lockup (rear bias = ${bias.toFixed(5)})`,
+      xLabel: 'Vehicle Speed (mph)',
+      yLabel: 'Deceleration (g)',
+      xTipLabel: 'speed',
+      valueDecimals: 3,
+      series,
+      bands: [],
+      vlines: eventLines(values),
+      specBox: opts.specBox,
+      yOverride: opts.yOverride || null,
+    };
+  }
+
+  function torqueSpec(solved, values, opts = {}) {
+    const series = [];
+    for (const { entry, result } of solved) {
+      const tag = multi(solved) ? `${entry.name} ` : '';
+      series.push({ name: `${tag}front rotor`, color: entry.color, dash: false, points: seriesPoints(result, result.frontTorque) });
+      series.push({ name: `${tag}rear rotor`, color: entry.color, dash: true, points: seriesPoints(result, result.rearTorque) });
+    }
+    return {
+      title: 'Brake Torque per Rotor',
+      xLabel: 'Speed (mph)',
+      yLabel: 'Torque (lbf·ft)',
+      xTipLabel: 'speed',
+      valueDecimals: 1,
+      series,
+      bands: [],
+      vlines: eventLines(values),
+      specBox: opts.specBox,
+      yOverride: opts.yOverride || null,
+    };
+  }
+
+  function linePressureSpec(solved, values, opts = {}) {
+    const series = [];
+    for (const { entry, result } of solved) {
+      const tag = multi(solved) ? `${entry.name} ` : '';
+      series.push({ name: `${tag}front`, color: entry.color, dash: false, points: seriesPoints(result, result.frontLinePressure) });
+      series.push({ name: `${tag}rear`, color: entry.color, dash: true, points: seriesPoints(result, result.rearLinePressure) });
+    }
+    return {
+      title: 'Line Pressure at Lockup',
+      xLabel: 'Speed (mph)',
+      yLabel: 'Line Pressure (psi)',
+      xTipLabel: 'speed',
+      valueDecimals: 0,
+      series,
+      bands: [],
+      vlines: eventLines(values),
+      specBox: opts.specBox,
+      yOverride: opts.yOverride || null,
+    };
+  }
+
+  function sweepSpec(sweep, values, cfg) {
+    const front = [];
+    const rear = [];
+    for (const p of sweep) {
+      if (!p.converged) continue;
+      front.push([p.x, p.front]);
+      rear.push([p.x, p.rear]);
+    }
+    const vlines = [];
+    if (cfg.currentX !== undefined && cfg.currentX !== null) {
+      vlines.push({
+        x: cfg.currentX,
+        label: `current ${cfg.currentLabel || ''}`.trim(),
+        legendLabel: 'current setting',
+        color: INK,
+      });
+    }
+    if (cfg.optimumX !== undefined && cfg.optimumX !== null) {
+      vlines.push({ x: cfg.optimumX, label: 'optimum', legendLabel: 'optimum', color: '#1F7A3D', dash: true });
+    }
+    return {
+      title: cfg.title,
+      xLabel: cfg.xLabel,
+      yLabel: 'Pedal Force (lbf)',
+      xTipLabel: cfg.xTipLabel || 'x',
+      xTipDecimals: cfg.xTipDecimals === undefined ? 3 : cfg.xTipDecimals,
+      valueDecimals: 1,
+      series: [
+        { name: 'front', color: BERKELEY_BLUE, dash: false, points: front },
+        { name: 'rear', color: CALIFORNIA_GOLD, dash: true, points: rear },
+      ],
+      bands: [{
+        y0: values.goalLowerLimit,
+        y1: values.goalUpperLimit,
+        label: `goal range ${values.goalLowerLimit}–${values.goalUpperLimit} lbf`,
+      }],
+      vlines,
+      specBox: null,
+    };
+  }
+
+  function objectiveSpec(sweep, values, cfg) {
+    const pts = sweep.filter((p) => p.converged).map((p) => [p.x, p.gap]);
+    const inBand = sweep.filter((p) => p.converged && p.inBand).map((p) => [p.x, p.gap]);
+    const vlines = [];
+    if (cfg.currentX !== undefined && cfg.currentX !== null) {
+      vlines.push({ x: cfg.currentX, label: 'current', legendLabel: 'current setting', color: INK });
+    }
+    if (cfg.optimumX !== undefined && cfg.optimumX !== null) {
+      vlines.push({ x: cfg.optimumX, label: 'optimum', legendLabel: 'optimum', color: '#1F7A3D', dash: true });
+    }
+    return {
+      title: cfg.title || 'Objective, front/rear pedal force gap',
+      xLabel: cfg.xLabel,
+      yLabel: 'Gap |front − rear| (lbf)',
+      xTipLabel: cfg.xTipLabel || 'x',
+      xTipDecimals: cfg.xTipDecimals === undefined ? 3 : cfg.xTipDecimals,
+      valueDecimals: 2,
+      series: [
+        { name: 'gap', color: BERKELEY_BLUE, dash: false, points: pts },
+        { name: 'gap, inside goal band', color: '#1F7A3D', type: 'scatter', radius: 2.6, points: inBand },
+      ],
+      bands: [],
+      vlines,
+      specBox: null,
+    };
+  }
+
+  return { Chart, decelerationSpec, linePressureSpec, objectiveSpec, pedalForceSpec, specBoxFor, sweepSpec, torqueSpec };
+})();
+
+/* ==== dom.js =============================================================== */
+__M['dom'] = (function () {
+  function h(tag, props = {}, ...children) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(props)) {
+      if (k === 'class') el.className = v;
+      else if (k === 'html') el.innerHTML = v;
+      else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
+      else if (v === true) el.setAttribute(k, '');
+      else if (v !== false && v !== null && v !== undefined) el.setAttribute(k, v);
+    }
+    for (const c of children.flat()) {
+      if (c === null || c === undefined || c === false) continue;
+      el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+    }
+    return el;
+  }
+
+  const $ = (id) => document.getElementById(id);
+
+  function fillSelect(select, list) {
+    select.replaceChildren(...list.map((o) => h('option', { value: o.id }, o.name)));
+  }
+
+  let toastTimer;
+
+  function toast(message, ms = 2400) {
+    const el = $('toast');
+    el.textContent = message;
+    el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+  }
+
+  return { $, fillSelect, h, toast };
+})();
+
+/* ==== config.js ============================================================ */
+__M['config'] = (function () {
+  const { FRONT_CALIPERS, REAR_CALIPERS, MASTER_CYLINDERS, FRONT_ROTORS, REAR_ROTORS, EVENT_SPEEDS, AERO_PRESETS, padById, padCaliperWarning } = __M['components'];
+
+  const SECTIONS = [
+    { id: 'front-caliper', label: 'Front caliper' },
+    { id: 'rear-caliper', label: 'Rear caliper' },
+    { id: 'front-hydraulics', label: 'Front hydraulics and rotor' },
+    { id: 'rear-hydraulics', label: 'Rear hydraulics and rotor' },
+    { id: 'pedal-box', label: 'Pedal box and bias' },
+    { id: 'vehicle', label: 'Vehicle and driver' },
+    { id: 'aero', label: 'Aerodynamics' },
+    { id: 'tire', label: 'Tire model' },
+    { id: 'goal', label: 'Goal band' },
+  ];
+
+  const FIELDS = [
+    // Pedal box and bias
+    { key: 'pedalRatio', label: 'Pedal ratio', section: 'pedal-box', min: 3.0, max: 7.0, step: 0.05, decimals: 2 },
+    { key: 'biasBarFrontBias', label: 'Bias bar front bias', section: 'pedal-box', min: 0.30, max: 0.70, step: 0.005, decimals: 3 },
+
+    // Vehicle and driver
+    { key: 'carWeight', label: 'Car weight', section: 'vehicle', min: 250, max: 500, step: 1, unitFamily: 'weight_lb', decimals: 1 },
+    { key: 'driverWeight', label: 'Driver weight', section: 'vehicle', min: 100, max: 250, step: 1, unitFamily: 'weight_lb', decimals: 1 },
+    { key: 'rearBias', label: 'Rear weight bias', section: 'vehicle', min: 0.45, max: 0.65, step: 0.005, decimals: 3 },
+    { key: 'wheelBase', label: 'Wheelbase', section: 'vehicle', min: 50, max: 75, step: 0.25, unitFamily: 'length_in', decimals: 2 },
+    { key: 'centerGravityZ', label: 'CG height', section: 'vehicle', min: 8, max: 16, step: 0.05, unitFamily: 'length_in', decimals: 2 },
+    { key: 'tireRad', label: 'Tire radius', section: 'vehicle', min: 6, max: 12, step: 0.05, unitFamily: 'length_in', decimals: 2 },
+    { key: 'topSpeed', label: 'Top speed', section: 'vehicle', min: 30, max: 100, step: 1, unitFamily: 'speed_mph', decimals: 0, integer: true },
+
+    // Front hydraulics and rotor
+    { key: 'frontRotorOD', label: 'Front rotor OD', section: 'front-hydraulics', min: 5.5, max: 9.5, step: 0.05, unitFamily: 'length_in', decimals: 2 },
+    { key: 'frontRotorID', label: 'Front rotor ID', section: 'front-hydraulics', min: 4.0, max: 8.0, step: 0.05, unitFamily: 'length_in', decimals: 2 },
+    { key: 'numFrontBrakes', label: 'Number of front brakes', section: 'front-hydraulics', min: 1, max: 2, step: 1, decimals: 0, integer: true },
+
+    // Rear hydraulics and rotor
+    { key: 'rearRotorOD', label: 'Rear rotor OD', section: 'rear-hydraulics', min: 5.5, max: 9.5, step: 0.05, unitFamily: 'length_in', decimals: 2 },
+    { key: 'rearRotorID', label: 'Rear rotor ID', section: 'rear-hydraulics', min: 4.0, max: 8.0, step: 0.05, unitFamily: 'length_in', decimals: 2 },
+    { key: 'numRearBrakes', label: 'Number of rear brakes', section: 'rear-hydraulics', min: 1, max: 2, step: 1, decimals: 0, integer: true },
+
+    // Goal band
+    { key: 'goalLowerLimit', label: 'Goal lower limit', section: 'goal', min: 40, max: 200, step: 1, unitFamily: 'force_lbf', decimals: 1 },
+    { key: 'goalUpperLimit', label: 'Goal upper limit', section: 'goal', min: 40, max: 200, step: 1, unitFamily: 'force_lbf', decimals: 1 },
+    { key: 'maxPedalForce', label: 'Max pedal force checked', section: 'goal', min: 80, max: 250, step: 1, unitFamily: 'force_lbf', decimals: 1 },
+
+    // Solver / cp
+    { key: 'maxBrakingGuess', label: 'Max braking guess (g)', section: 'vehicle', min: 1.5, max: 5.0, step: 0.05, decimals: 2 },
+    { key: 'maxDecelGs', label: 'Max decel for cp (g)', section: 'aero', min: 1.5, max: 3.5, step: 0.05, decimals: 2 },
+    { key: 'cpStatic', label: 'cp static', section: 'aero', min: 0.3, max: 0.8, step: 0.002, decimals: 4 },
+    { key: 'cpAtMaxDecel', label: 'cp at max decel', section: 'aero', min: 0.3, max: 0.8, step: 0.002, decimals: 4 },
+
+    // Aero
+    { key: 'Cl', label: 'Cl', section: 'aero', min: 0, max: 4, step: 0.01, decimals: 3, aeroOnly: true },
+    { key: 'wingArea', label: 'Reference area (m²)', section: 'aero', min: 0.5, max: 4, step: 0.001, decimals: 5, aeroOnly: true },
+    { key: 'airDensity', label: 'Air density (kg/m³)', section: 'aero', min: 1.0, max: 1.3, step: 0.001, decimals: 3, aeroOnly: true },
+
+    // Tire model
+    { key: 'tireA', label: 'Tire coeff a', section: 'tire', min: 1.0, max: 2.5, step: 0.001, decimals: 4 },
+    { key: 'tireB', label: 'Tire coeff b', section: 'tire', min: 0, max: 0.0005, step: 0.000001, decimals: 8 },
+    { key: 'tireScale1', label: 'Tire scale 1', section: 'tire', min: 0.5, max: 1.2, step: 0.005, decimals: 3 },
+    { key: 'tireScale2', label: 'Tire scale 2', section: 'tire', min: 0.5, max: 1.2, step: 0.005, decimals: 3 },
+  ];
+
+  const FIELD_BY_KEY = Object.fromEntries(FIELDS.map((f) => [f.key, f]));
+
+  // Defaults. Every number traceable to a line in brakescript_w_aero_B27.m
+
+  function defaultConfig() {
+    return {
+      // Desired brake system goals (MATLAB 19-30)
+      maxPedalForce: 140,
+      goalUpperLimit: 120,
+      goalLowerLimit: 100,
+      variableCP: true,
+
+      // Pedal box (MATLAB 32-42)
+      pedalRatio: 4.4,
+      frontMC: 0.625, // in
+      rearMC: 0.8125, // in
+      biasBarFrontBias: 0.425,
+
+      // Wheel shell (MATLAB 44-69)
+      frontCaliper: 25, // mm
+      frontCaliperNum: 4,
+      rearCaliper: 31.75, // mm
+      rearCaliperNum: 2,
+      frontRotorOD: 7.2,
+      frontRotorID: 5.3,
+      rearRotorOD: 6.85,
+      rearRotorID: 5.3,
+      numFrontBrakes: 2,
+      numRearBrakes: 2,
+      frontRotorMu: 0.7, // EBC GPFAX
+      rearRotorMu: 0.55, // BP-45
+
+      // Vehicle (MATLAB 71-86)
+      tireRad: 8,
+      topSpeed: 70,
+      wheelBase: 62,
+      centerGravityZ: 11.06,
+      rearBias: 0.57,
+      carWeight: 365,
+      driverWeight: 170,
+
+      // Tire model (MATLAB 89)
+      tireA: 1.8073,
+      tireB: 0.00018293,
+      tireScale1: 0.875,
+      tireScale2: 0.95,
+
+      // cp (MATLAB 91-102)
+      maxDecelGs: 2.3,
+      cpStatic: 0.604,
+      cpAtMaxDecel: 0.4676,
+      cpFixed: 0.56, // the `else` branch, MATLAB 100
+
+      downforceMode: 'plotted',
+      Cl: 2.03,
+      wingArea: 2.71785,
+      airDensity: 1.184,
+
+      // Iteration (MATLAB 177-181)
+      maxBrakingGuess: 2.7,
+
+      // Component selections (drive the numbers above)
+      frontCaliperId: 'isr-22-048',
+      rearCaliperId: 'wilwood-gp200',
+      frontCaliperType: 'opposed',
+      rearCaliperType: 'opposed',
+      frontMCId: 'tilton-78-625',
+      rearMCId: 'tilton-78-812',
+      frontPadId: 'ebc-gpfax',
+      rearPadId: 'bp-45',
+      frontRotorId: 'front-current',
+      rearRotorId: 'rear-current',
+      driverWeightId: 'dw-170',
+      aeroPresetId: 'cl203-wing-1184',
+
+      eventSpeeds: EVENT_SPEEDS.map((e) => ({ id: e.id, value: e.value, on: e.defaultOn })),
+
+      // Display units (presentation only, never affects the solve)
+      units: {
+        length_in: 'in',
+        length_mm: 'mm',
+        weight_lb: 'lb',
+        force_lbf: 'lbf',
+        speed_mph: 'mph',
+      },
+    };
+  }
+
+  /** A full configuration entry as held by the comparison list. */
+  function makeConfigEntry(name, color, overrides = {}) {
+    return {
+      name,
+      color,
+      enabled: true,
+      values: { ...defaultConfig(), ...overrides },
+    };
+  }
+
+  /** The initial state: one configuration holding the source file's values. */
+  function initialConfigs(colors) {
+    return [makeConfigEntry('Car as built', colors[0])];
+  }
+
+  // Derived helpers
+
+  /** Active event speeds, in list order. The first is the primary. */
+  function activeEventSpeeds(values) {
+    return values.eventSpeeds.filter((e) => e.on);
+  }
+
+  function primaryEventSpeed(values) {
+    const active = activeEventSpeeds(values);
+    return active.length ? active[0].value : 42;
+  }
+
+  function coerceField(key, raw, previous) {
+    const spec = FIELD_BY_KEY[key];
+    let v = typeof raw === 'number' ? raw : parseFloat(raw);
+    if (!Number.isFinite(v)) return previous;
+
+    if (key === 'Cl') v = Math.abs(v);
+
+    if (spec && spec.integer) v = Math.round(v);
+
+    // Hard guards against division by zero or a degenerate solve.
+    const mustBePositive = [
+      'pedalRatio', 'frontMC', 'rearMC', 'frontCaliper', 'rearCaliper',
+      'frontRotorOD', 'frontRotorID', 'rearRotorOD', 'rearRotorID',
+      'wheelBase', 'tireRad', 'carWeight', 'driverWeight', 'topSpeed',
+      'frontRotorMu', 'rearRotorMu', 'numFrontBrakes', 'numRearBrakes',
+      'wingArea', 'airDensity', 'maxDecelGs',
+    ];
+    if (mustBePositive.includes(key) && v <= 0) return previous;
+
+    if (key === 'biasBarFrontBias' || key === 'rearBias') {
+      if (v <= 0 || v >= 1) return previous;
+    }
+    if (key === 'maxBrakingGuess' && v <= 1) return previous;
+    if (key === 'topSpeed') v = Math.max(1, Math.min(300, v));
+
+    return v;
+  }
+
+  const IN_TO_MM = 25.4;
+
+  function validate(values, result) {
+    const issues = [];
+    const frontCaliper = FRONT_CALIPERS.find((c) => c.id === values.frontCaliperId);
+    const rearCaliper = REAR_CALIPERS.find((c) => c.id === values.rearCaliperId);
+    const frontPad = padById(values.frontPadId);
+    const rearPad = padById(values.rearPadId);
+
+    // Rotor geometry sanity
+    if (values.frontRotorID >= values.frontRotorOD) {
+      issues.push({
+        level: 'error',
+        section: 'front-hydraulics',
+        message: `Front rotor ID (${values.frontRotorID.toFixed(2)} in) is not smaller than its OD (${values.frontRotorOD.toFixed(2)} in). The effective radius is meaningless.`,
+      });
+    }
+    if (values.rearRotorID >= values.rearRotorOD) {
+      issues.push({
+        level: 'error',
+        section: 'rear-hydraulics',
+        message: `Rear rotor ID (${values.rearRotorID.toFixed(2)} in) is not smaller than its OD (${values.rearRotorOD.toFixed(2)} in). The effective radius is meaningless.`,
+      });
+    }
+
+    // Rotor OD against the caliper's published disc range
+    const checkDiscRange = (caliper, od, section, label) => {
+      if (!caliper || !caliper.discRange) return;
+      const odMm = od * IN_TO_MM;
+      const [lo, hi] = caliper.discRange;
+      if (odMm < lo || odMm > hi) {
+        issues.push({
+          level: 'warn',
+          section,
+          message: `${label} rotor OD ${odMm.toFixed(1)} mm is outside the ${caliper.name} published disc range of ${lo} to ${hi} mm.`,
+        });
+      }
+    };
+    checkDiscRange(frontCaliper, values.frontRotorOD, 'front-hydraulics', 'Front');
+    checkDiscRange(rearCaliper, values.rearRotorOD, 'rear-hydraulics', 'Rear');
+
+    const checkSweptHeight = (caliper, od, id, section, label) => {
+      if (!caliper || !caliper.sweptHeight) return;
+      const annulusMm = ((od - id) / 2) * IN_TO_MM;
+      if (caliper.sweptHeight > annulusMm) {
+        issues.push({
+          level: 'warn',
+          section,
+          message: `${caliper.name} pad swept height ${caliper.sweptHeight} mm exceeds the ${label.toLowerCase()} rotor annulus of ${annulusMm.toFixed(1)} mm. The pad overhangs by ${(caliper.sweptHeight - annulusMm).toFixed(1)} mm.`,
+        });
+      }
+    };
+    checkSweptHeight(frontCaliper, values.frontRotorOD, values.frontRotorID, 'front-hydraulics', 'Front');
+    checkSweptHeight(rearCaliper, values.rearRotorOD, values.rearRotorID, 'rear-hydraulics', 'Rear');
+
+    if (values.biasBarFrontBias < 0.45 || values.biasBarFrontBias > 0.63) {
+      issues.push({
+        level: 'warn',
+        section: 'pedal-box',
+        message: `Bias bar at ${values.biasBarFrontBias.toFixed(3)} is outside the 0.45 to 0.63 mechanical range of the bias bar. The source file ships at 0.425, which is also outside. The model runs, but the hardware cannot reach it.`,
+      });
+    }
+
+    // Pad / caliper compatibility
+    const fw = padCaliperWarning(frontPad, frontCaliper);
+    if (fw) issues.push({ level: 'warn', section: 'front-caliper', message: `Front: ${fw}` });
+    const rw = padCaliperWarning(rearPad, rearCaliper);
+    if (rw) issues.push({ level: 'warn', section: 'rear-caliper', message: `Rear: ${rw}` });
+
+    // Goal band ordering
+    if (values.goalLowerLimit >= values.goalUpperLimit) {
+      issues.push({
+        level: 'error',
+        section: 'goal',
+        message: `Goal lower limit (${values.goalLowerLimit}) is not below the upper limit (${values.goalUpperLimit}). The band is empty.`,
+      });
+    }
+
+    if (!result) return issues;
+
+    // Convergence
+    if (result.failedSpeeds.length) {
+      const list = result.failedSpeeds;
+      const shown = list.length > 12 ? `${list.slice(0, 12).join(', ')} ... (${list.length} total)` : list.join(', ');
+      issues.push({
+        level: 'error',
+        section: null,
+        message: `Deceleration did not converge at ${list.length} speed${list.length === 1 ? '' : 's'} (mph: ${shown}). These points are omitted from the plots rather than drawn as zero. Raising "Max braking guess" usually fixes it.`,
+      });
+    }
+
+    // Rear normal force gone negative
+    const negRear = [];
+    for (let i = 0; i < result.speeds.length; i++) {
+      if (result.converged[i] && result.rearNormForce[i] < 0) negRear.push(result.speeds[i]);
+    }
+    if (negRear.length) {
+      issues.push({
+        level: 'error',
+        section: 'vehicle',
+        message: `Rear normal force is negative at ${negRear.length} speed${negRear.length === 1 ? '' : 's'} (from ${negRear[0]} mph). Weight transfer has lifted the rear axle, so the model is outside its valid range.`,
+      });
+    }
+
+    // Pedal force outside the goal band at an active event speed
+    for (const ev of activeEventSpeeds(values)) {
+      const idx = Math.round(ev.value);
+      if (idx < 0 || idx >= result.speeds.length || !result.converged[idx]) continue;
+      const f = result.frontPedalForce[idx];
+      const r = result.rearPedalForce[idx];
+      const check = (val, label) => {
+        if (val < values.goalLowerLimit) {
+          issues.push({
+            level: 'warn',
+            section: 'goal',
+            message: `${label} pedal force at ${ev.value} mph is ${val.toFixed(1)} lbf, below the ${values.goalLowerLimit} lbf goal. The axle locks too easily.`,
+          });
+        } else if (val > values.goalUpperLimit) {
+          issues.push({
+            level: 'warn',
+            section: 'goal',
+            message: `${label} pedal force at ${ev.value} mph is ${val.toFixed(1)} lbf, above the ${values.goalUpperLimit} lbf goal. The driver has to push too hard.`,
+          });
+        }
+      };
+      check(f, 'Front');
+      check(r, 'Rear');
+    }
+
+    return issues;
+  }
+
+  // Applying a catalogue selection onto the numeric values
+
+  function applyFrontCaliper(values, id) {
+    const c = FRONT_CALIPERS.find((x) => x.id === id);
+    if (!c) return values;
+    const next = { ...values, frontCaliperId: id };
+    if (!c.custom) {
+      next.frontCaliper = c.bore;
+      next.frontCaliperNum = c.pistons;
+      next.frontCaliperType = c.type;
+    }
+    return next;
+  }
+
+  function applyRearCaliper(values, id) {
+    const c = REAR_CALIPERS.find((x) => x.id === id);
+    if (!c) return values;
+    const next = { ...values, rearCaliperId: id };
+    if (!c.custom) {
+      next.rearCaliper = c.bore;
+      next.rearCaliperNum = c.pistons;
+      next.rearCaliperType = c.type;
+    }
+    return next;
+  }
+
+  function applyMasterCylinder(values, side, id) {
+    const m = MASTER_CYLINDERS.find((x) => x.id === id);
+    if (!m) return values;
+    const key = side === 'front' ? 'frontMC' : 'rearMC';
+    const idKey = side === 'front' ? 'frontMCId' : 'rearMCId';
+    const next = { ...values, [idKey]: id };
+    if (!m.custom) next[key] = m.bore;
+    return next;
+  }
+
+  function applyPad(values, side, id) {
+    const p = padById(id);
+    if (!p) return values;
+    const key = side === 'front' ? 'frontRotorMu' : 'rearRotorMu';
+    const idKey = side === 'front' ? 'frontPadId' : 'rearPadId';
+    const next = { ...values, [idKey]: id };
+    if (!p.custom) next[key] = p.mu;
+    return next;
+  }
+
+  function applyRotor(values, side, id) {
+    const list = side === 'front' ? FRONT_ROTORS : REAR_ROTORS;
+    const r = list.find((x) => x.id === id);
+    if (!r) return values;
+    const idKey = side === 'front' ? 'frontRotorId' : 'rearRotorId';
+    const next = { ...values, [idKey]: id };
+    if (!r.custom) {
+      next[side === 'front' ? 'frontRotorOD' : 'rearRotorOD'] = r.od;
+      next[side === 'front' ? 'frontRotorID' : 'rearRotorID'] = r.id_;
+    }
+    return next;
+  }
+
+  function applyAeroPreset(values, id) {
+    const p = AERO_PRESETS.find((x) => x.id === id);
+    if (!p) return values;
+    const next = { ...values, aeroPresetId: id };
+    if (!p.custom) {
+      next.Cl = p.Cl;
+      next.wingArea = p.wingArea;
+      next.airDensity = p.airDensity;
+    }
+    return next;
+  }
+
+  function applyDriverWeight(values, id, customValue) {
+    const next = { ...values, driverWeightId: id };
+    if (id === 'dw-custom') {
+      if (customValue !== undefined) next.driverWeight = customValue;
+    } else {
+      const d = { 'dw-130': 130, 'dw-150': 150, 'dw-170': 170, 'dw-200': 200 }[id];
+      if (d !== undefined) next.driverWeight = d;
+    }
+    return next;
+  }
+
+  return { FIELDS, FIELD_BY_KEY, SECTIONS, activeEventSpeeds, applyAeroPreset, applyDriverWeight, applyFrontCaliper, applyMasterCylinder, applyPad, applyRearCaliper, applyRotor, coerceField, defaultConfig, initialConfigs, makeConfigEntry, primaryEventSpeed, validate };
+})();
+
+/* ==== optimize.js ========================================================== */
+__M['optimize'] = (function () {
+  const { solve, sampleAt } = __M['solver'];
+  const { MC_BORES, masterCylinderByBore, PADS } = __M['components'];
+  const { primaryEventSpeed } = __M['config'];
+  /**
+   * optimize.js - Constrained single-parameter search.
+   *
+   * GOAL: Find the value of a single parameter that minimises the difference
+   * between the front and rear pedal-force curves at the primary event speed,
+   * while keeping both forces within the target band.
+   *
+   * The band constraint is essential. Without it, the gap can be minimised by
+   * setups that achieve near-perfect balance at an impractical absolute pedal
+   * force. For example, a 30 lbf balanced pedal is clearly worse than a
+   * 105/112 lbf setup. Therefore, a result outside the target band is never
+   * reported as a successful optimisation; see `status` on the return value.
+   *
+   * No DOM access here. `plots.js` consumes the sweep data, and `ui.js` renders
+   * the optimisation verdict.
+   */
+
+
+  const OPTIMIZABLE = [
+    { key: 'biasBarFrontBias', label: 'Bias bar front bias', kind: 'continuous', min: 0.30, max: 0.70, decimals: 4 },
+    { key: 'pedalRatio', label: 'Pedal ratio', kind: 'continuous', min: 3.0, max: 7.0, decimals: 3 },
+    { key: 'frontMC', label: 'Front MC bore', kind: 'discrete', values: MC_BORES, unit: 'in', decimals: 4 },
+    { key: 'rearMC', label: 'Rear MC bore', kind: 'discrete', values: MC_BORES, unit: 'in', decimals: 4 },
+    { key: 'frontRotorOD', label: 'Front rotor OD', kind: 'continuous', min: 5.5, max: 9.5, unit: 'in', decimals: 3 },
+    { key: 'rearRotorOD', label: 'Rear rotor OD', kind: 'continuous', min: 5.5, max: 9.5, unit: 'in', decimals: 3 },
+    { key: 'frontRotorMu', label: 'Front pad mu', kind: 'continuous', min: 0.30, max: 0.80, decimals: 4 },
+    { key: 'rearRotorMu', label: 'Rear pad mu', kind: 'continuous', min: 0.30, max: 0.80, decimals: 4 },
+  ];
+
+  function optimizableByKey(key) {
+    return OPTIMIZABLE.find((o) => o.key === key) || null;
+  }
+
+  function applyCandidate(values, key, x) {
+    const next = { ...values, [key]: x };
+
+    if (key === 'frontMC' || key === 'rearMC') {
+      const part = masterCylinderByBore(x);
+      const idKey = key === 'frontMC' ? 'frontMCId' : 'rearMCId';
+      next[idKey] = part ? part.id : 'custom-mc';
+    }
+
+    if (key === 'frontRotorOD') next.frontRotorId = 'front-custom';
+    if (key === 'rearRotorOD') next.rearRotorId = 'rear-custom';
+
+    if (key === 'frontRotorMu' || key === 'rearRotorMu') {
+      const pad = PADS.find((p) => !p.custom && Math.abs(p.mu - x) < 1e-9);
+      const idKey = key === 'frontRotorMu' ? 'frontPadId' : 'rearPadId';
+      next[idKey] = pad ? pad.id : 'custom-pad';
+    }
+
+    return next;
+  }
+
+  function describeValue(key, x, decimals = 4) {
+    const spec = optimizableByKey(key);
+    const unit = spec && spec.unit ? ` ${spec.unit}` : '';
+    const num = `${x.toFixed(decimals)}${unit}`;
+
+    if (key === 'frontMC' || key === 'rearMC') {
+      const part = masterCylinderByBore(x);
+      if (part) return `${part.name}, ${part.bore} in (${part.boreMm} mm)`;
+      return `${num} (not a catalogue size)`;
+    }
+    if (key === 'frontRotorMu' || key === 'rearRotorMu') {
+      const pad = PADS.find((p) => !p.custom && Math.abs(p.mu - x) < 5e-4);
+      if (pad) return `${pad.name}, mu ${pad.mu}`;
+      return `mu ${num}`;
+    }
+    return num;
+  }
+
+  function evaluateCandidate(values, key, x, eventSpeed) {
+    const cfg = applyCandidate(values, key, x);
+    cfg.topSpeed = Math.max(1, Math.ceil(eventSpeed));
+
+    const r = solve(cfg);
+    const front = sampleAt(r, r.frontPedalForce, eventSpeed);
+    const rear = sampleAt(r, r.rearPedalForce, eventSpeed);
+    const decel = sampleAt(r, r.deceleration, eventSpeed);
+
+    if (front === null || rear === null) {
+      return { x, converged: false, front: null, rear: null, gap: null, decel: null, inBand: false, violation: Infinity };
+    }
+
+    const lo = values.goalLowerLimit;
+    const hi = values.goalUpperLimit;
+    const violation =
+      Math.max(0, lo - front) + Math.max(0, front - hi) +
+      Math.max(0, lo - rear) + Math.max(0, rear - hi);
+
+    return {
+      x,
+      converged: true,
+      front,
+      rear,
+      gap: Math.abs(front - rear),
+      decel,
+      inBand: violation === 0,
+      violation,
+    };
+  }
+
+  const GOLDEN = (Math.sqrt(5) - 1) / 2;
+
+  function goldenSection(values, key, a, b, eventSpeed, iterations = 40) {
+    let lo = a;
+    let hi = b;
+    let c = hi - GOLDEN * (hi - lo);
+    let d = lo + GOLDEN * (hi - lo);
+    let fc = evaluateCandidate(values, key, c, eventSpeed);
+    let fd = evaluateCandidate(values, key, d, eventSpeed);
+
+    const score = (p) => (p.converged ? p.gap : Infinity);
+
+    for (let i = 0; i < iterations && hi - lo > 1e-9; i++) {
+      if (score(fc) < score(fd)) {
+        hi = d;
+        d = c;
+        fd = fc;
+        c = hi - GOLDEN * (hi - lo);
+        fc = evaluateCandidate(values, key, c, eventSpeed);
+      } else {
+        lo = c;
+        c = d;
+        fc = fd;
+        d = lo + GOLDEN * (hi - lo);
+        fd = evaluateCandidate(values, key, d, eventSpeed);
+      }
+    }
+    return score(fc) < score(fd) ? fc : fd;
+  }
+
+  function sweepParameter(values, key, eventSpeed, samples = 161) {
+    const spec = optimizableByKey(key);
+    if (!spec) return [];
+
+    if (spec.kind === 'discrete') {
+      return spec.values.map((x) => evaluateCandidate(values, key, x, eventSpeed));
+    }
+
+    const out = [];
+    for (let i = 0; i < samples; i++) {
+      const x = spec.min + ((spec.max - spec.min) * i) / (samples - 1);
+      out.push(evaluateCandidate(values, key, x, eventSpeed));
+    }
+    return out;
+  }
+
+  function optimize(values, key, opts = {}) {
+    const spec = optimizableByKey(key);
+    if (!spec) throw new Error(`not an optimizable parameter: ${key}`);
+
+    const eventSpeed = opts.eventSpeed !== undefined ? opts.eventSpeed : primaryEventSpeed(values);
+    const samples = opts.samples || 161;
+
+    const sweep = sweepParameter(values, key, eventSpeed, samples);
+    const current = evaluateCandidate(values, key, values[key], eventSpeed);
+
+    const usable = sweep.filter((p) => p.converged);
+    if (!usable.length) {
+      return {
+        key, label: spec.label, kind: spec.kind, eventSpeed,
+        currentValue: values[key], current, sweep,
+        status: 'no-solution', best: null, closest: null, tightest: null,
+        message: `No value of ${spec.label} in its range produced a converged solve at ${eventSpeed} mph. Check "Max braking guess" and the goal band before optimizing.`,
+      };
+    }
+
+    const inBand = usable.filter((p) => p.inBand);
+    const tightest = usable.reduce((a, b) => (b.gap < a.gap ? b : a));
+
+    if (!inBand.length) {
+      const closest = usable.reduce((a, b) => (b.violation < a.violation ? b : a));
+      const other = OPTIMIZABLE.filter((o) => o.key !== key)
+        .slice(0, 3)
+        .map((o) => o.label)
+        .join(', ');
+
+      return {
+        key, label: spec.label, kind: spec.kind, eventSpeed,
+        currentValue: values[key], current, sweep,
+        status: 'none-in-band',
+        best: null,
+        closest,
+        tightest,
+        message:
+          `No value of ${spec.label} keeps both pedal forces inside the ` +
+          `${values.goalLowerLimit}–${values.goalUpperLimit} lbf band at ${eventSpeed} mph. ` +
+          `The closest is ${describeValue(key, closest.x, spec.decimals)}, which misses the band by ` +
+          `${closest.violation.toFixed(1)} lbf. Changing ${spec.label} alone cannot fix this, ` +
+          `try ${other} first, or widen the band if the goal itself is wrong.`,
+      };
+    }
+
+    let best = inBand.reduce((a, b) => (b.gap < a.gap ? b : a));
+
+    if (spec.kind === 'continuous') {
+      const idx = sweep.indexOf(best);
+      const a = sweep[Math.max(0, idx - 1)].x;
+      const b = sweep[Math.min(sweep.length - 1, idx + 1)].x;
+      const refined = goldenSection(values, key, a, b, eventSpeed);
+      if (refined.converged && refined.inBand && refined.gap < best.gap) best = refined;
+    }
+
+    const noteTightest =
+      tightest.gap < best.gap - 1e-9
+        ? ` A tighter balance exists at ${describeValue(key, tightest.x, spec.decimals)} ` +
+          `(gap ${tightest.gap.toFixed(2)} lbf) but it falls outside the goal band, so it is not recommended.`
+        : '';
+
+    return {
+      key, label: spec.label, kind: spec.kind, eventSpeed,
+      currentValue: values[key], current, sweep,
+      status: 'ok',
+      best,
+      closest: null,
+      tightest,
+      message:
+        `${spec.label} = ${describeValue(key, best.x, spec.decimals)} balances the axles to within ` +
+        `${best.gap.toFixed(2)} lbf at ${eventSpeed} mph, with both forces inside the goal band.` +
+        noteTightest,
+    };
+  }
+
+  return { OPTIMIZABLE, applyCandidate, describeValue, evaluateCandidate, optimizableByKey, optimize, sweepParameter };
+})();
+
+/* ==== share.js ============================================================= */
+__M['share'] = (function () {
+  const { defaultConfig } = __M['config'];
+  const { CONFIG_COLORS } = __M['components'];
+
+  const STATE_VERSION = 1;
+
+  function b64urlEncode(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    for (const b of bytes) bin += String.fromCharCode(b);
+    return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  function b64urlDecode(s) {
+    const pad = s.length % 4 ? '='.repeat(4 - (s.length % 4)) : '';
+    const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + pad);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new TextDecoder().decode(bytes);
+  }
+
+  function deltaOf(values) {
+    const base = defaultConfig();
+    const delta = {};
+    for (const key of Object.keys(values)) {
+      const a = values[key];
+      const b = base[key];
+      if (typeof a === 'object' && a !== null) {
+        if (JSON.stringify(a) !== JSON.stringify(b)) delta[key] = a;
+      } else if (a !== b) {
+        delta[key] = a;
+      }
+    }
+    return delta;
+  }
+
+  function encodeState(configs, viewState = {}) {
+    const payload = {
+      v: STATE_VERSION,
+      c: configs.map((e) => ({
+        n: e.name,
+        k: e.color,
+        e: e.enabled ? 1 : 0,
+        d: deltaOf(e.values),
+      })),
+      view: viewState,
+    };
+    return b64urlEncode(JSON.stringify(payload));
+  }
+
+  function decodeState(fragment) {
+    if (!fragment) return null;
+    try {
+      const raw = JSON.parse(b64urlDecode(fragment));
+      if (!raw || !Array.isArray(raw.c)) return null;
+
+      const configs = raw.c.slice(0, 4).map((c, i) => ({
+        name: typeof c.n === 'string' ? c.n : `Config ${i + 1}`,
+        color: typeof c.k === 'string' ? c.k : CONFIG_COLORS[i % CONFIG_COLORS.length],
+        enabled: c.e !== 0,
+        values: { ...defaultConfig(), ...(c.d || {}) },
+      }));
+      if (!configs.length) return null;
+      return { configs, view: raw.view || {} };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function writeFragment(configs, viewState) {
+    const encoded = encodeState(configs, viewState);
+    try {
+      window.history.replaceState(null, '', `${window.location.pathname}#${encoded}`);
+    } catch {
+      window.location.hash = encoded;
+    }
+    const origin = window.location.origin;
+    return origin && origin !== 'null'
+      ? `${origin}${window.location.pathname}#${encoded}`
+      : `${window.location.href.split('#')[0]}#${encoded}`;
+  }
+
+  function readFragment() {
+    const frag = window.location.hash.replace(/^#/, '');
+    return decodeState(frag);
+  }
+
+  const CSV_COLUMNS = [
+    'config',
+    'speed_mph',
+    'converged',
+    'deceleration_g',
+    'locks_first',
+    'front_pedal_force_lbf',
+    'rear_pedal_force_lbf',
+    'pedal_force_gap_lbf',
+    'front_normal_force_lbf',
+    'rear_normal_force_lbf',
+    'downforce',
+    'cp',
+    'weight_transfer_lbf',
+    'front_torque_lbf_ft',
+    'rear_torque_lbf_ft',
+    'front_line_pressure_psi',
+    'rear_line_pressure_psi',
+  ];
+
+  function csvCell(v) {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+
+  function toCSV(solved) {
+    const lines = [CSV_COLUMNS.join(',')];
+    for (const { entry, result } of solved) {
+      for (let i = 0; i < result.speeds.length; i++) {
+        const conv = result.converged[i];
+        lines.push(
+          [
+            csvCell(entry.name),
+            result.speeds[i],
+            conv ? 'yes' : 'no',
+            conv ? result.deceleration[i].toFixed(6) : '',
+            conv ? (result.lockFront[i] ? 'front' : 'rear') : '',
+            conv ? result.frontPedalForce[i].toFixed(4) : '',
+            conv ? result.rearPedalForce[i].toFixed(4) : '',
+            conv ? Math.abs(result.frontPedalForce[i] - result.rearPedalForce[i]).toFixed(4) : '',
+            conv ? result.frontNormForce[i].toFixed(4) : '',
+            conv ? result.rearNormForce[i].toFixed(4) : '',
+            result.downforce[i].toFixed(4),
+            conv ? result.cpValues[i].toFixed(6) : '',
+            conv ? result.dynWeight[i].toFixed(4) : '',
+            conv ? result.frontTorque[i].toFixed(4) : '',
+            conv ? result.rearTorque[i].toFixed(4) : '',
+            conv ? result.frontLinePressure[i].toFixed(2) : '',
+            conv ? result.rearLinePressure[i].toFixed(2) : '',
+          ].join(',')
+        );
+      }
+    }
+    return lines.join('\n');
+  }
+
+  function downloadText(filename, text, mime = 'text/csv') {
+    const blob = new Blob([text], { type: `${mime};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch { ok = false; }
+      document.body.removeChild(ta);
+      return ok;
+    }
+  }
+
+  return { copyToClipboard, decodeState, downloadText, encodeState, readFragment, toCSV, writeFragment };
+})();
+
+/* ==== state.js ============================================================= */
+__M['state'] = (function () {
+  const { initialConfigs } = __M['config'];
+  const { CONFIG_COLORS } = __M['components'];
+
+  const MAX_CONFIGS = 4;
+
+  const state = {
+    configs: initialConfigs(CONFIG_COLORS),
+    activeIndex: 0,
+    view: {
+      specBox: false,
+      manualAxis: false,
+      axisMin: 40,
+      axisMax: 140,
+      extraPlots: [],
+    },
+    lastOptimization: null,
+  };
+
+  const activeConfig = () => state.configs[state.activeIndex];
+  const activeValues = () => activeConfig().values;
+
+  const refs = {
+    fields: new Map(),
+    selects: new Map(),
+    reveals: new Map(),
+    custom: new Map(),
+    specBlocks: new Map(),
+    warnings: new Map(),
+    derived: new Map(),
+    eventRows: [],
+  };
+
+  let recomputeFn = () => {};
+  let queued = false;
+
+  function setRecompute(fn) {
+    recomputeFn = fn;
+  }
+
+  function recomputeNow() {
+    queued = false;
+    recomputeFn();
+  }
+
+  function requestRecompute() {
+    if (queued) return;
+    queued = true;
+    const run = () => {
+      if (!queued) return;
+      queued = false;
+      recomputeFn();
+    };
+    requestAnimationFrame(run);
+    setTimeout(run, 100);
+  }
+
+  return { MAX_CONFIGS, activeConfig, activeValues, recomputeNow, refs, requestRecompute, setRecompute, state };
+})();
+
+/* ==== fields.js ============================================================ */
+__M['fields'] = (function () {
+  const { h } = __M['dom'];
+  const { activeValues, refs, requestRecompute } = __M['state'];
+  const { FIELDS, coerceField } = __M['config'];
+  const { UNITS, toDisplay, toCanonical } = __M['units'];
+
+  function buildField(spec) {
+    const family = spec.unitFamily;
+    const unitSel = family
+      ? h('select', { class: 'select select-unit', 'aria-label': `${spec.label} unit` },
+          ...UNITS[family].options.map((o) => h('option', { value: o.id }, o.label)))
+      : null;
+
+    const num = h('input', { type: 'number', class: 'num', step: spec.step, 'aria-label': spec.label });
+    const slider = h('input', {
+      type: 'range', min: spec.min, max: spec.max, step: spec.step,
+      'aria-label': `${spec.label} slider`,
+    });
+
+    const commit = (raw, source) => {
+      const v = activeValues();
+      const unitId = family ? v.units[family] : null;
+      const canonical = family ? toCanonical(family, unitId, parseFloat(raw)) : parseFloat(raw);
+      v[spec.key] = coerceField(spec.key, canonical, v[spec.key]);
+      syncField(spec.key, source);
+      requestRecompute();
+    };
+
+    num.addEventListener('input', () => commit(num.value, num));
+    slider.addEventListener('input', () => commit(slider.value, slider));
+
+    if (unitSel) {
+      unitSel.addEventListener('change', () => {
+        activeValues().units[family] = unitSel.value;
+        syncField(spec.key, null);
+        requestRecompute();
+      });
+    }
+
+    const rangeLabels = h('div', { class: 'field-range-labels' }, h('span'), h('span'));
+
+    const wrap = h('div', { class: 'field' },
+      h('div', { class: 'field-head' },
+        h('span', { class: 'field-label' }, spec.label),
+        h('span', { class: 'field-inputs' }, num, unitSel)),
+      h('div', { class: 'field-row' }, slider),
+      rangeLabels);
+
+    refs.fields.set(spec.key, { slider, num, unitSel, family, spec, rangeLabels });
+    return wrap;
+  }
+
+  function syncField(key, exclude) {
+    const r = refs.fields.get(key);
+    if (!r) return;
+
+    const v = activeValues();
+    const unitId = r.family ? v.units[r.family] : null;
+    const display = r.family ? toDisplay(r.family, unitId, v[key]) : v[key];
+    const opt = r.family ? UNITS[r.family].options.find((o) => o.id === unitId) : null;
+    const decimals = opt ? opt.decimals : r.spec.decimals;
+
+    const lo = r.family ? toDisplay(r.family, unitId, r.spec.min) : r.spec.min;
+    const hi = r.family ? toDisplay(r.family, unitId, r.spec.max) : r.spec.max;
+    const step = r.family
+      ? Math.abs(toDisplay(r.family, unitId, r.spec.step) - toDisplay(r.family, unitId, 0))
+      : r.spec.step;
+
+    r.slider.min = lo;
+    r.slider.max = hi;
+    r.slider.step = step || r.spec.step;
+    r.num.step = step || r.spec.step;
+
+    if (r.slider !== exclude) r.slider.value = Math.min(hi, Math.max(lo, display));
+    if (r.num !== exclude) r.num.value = r.spec.integer ? Math.round(display) : Number(display.toFixed(decimals));
+    if (r.unitSel && r.unitSel !== exclude && unitId) r.unitSel.value = unitId;
+
+    const [loEl, hiEl] = r.rangeLabels.children;
+    loEl.textContent = r.spec.integer ? Math.round(lo) : lo.toFixed(Math.min(3, decimals));
+    hiEl.textContent = r.spec.integer ? Math.round(hi) : hi.toFixed(Math.min(3, decimals));
+  }
+
+  const fieldsFor = (sectionId) => FIELDS.filter((f) => f.section === sectionId);
+
+  function labelledSelect(labelText, name, list, onChange) {
+    const sel = h('select', { class: 'select select-wide', 'aria-label': labelText },
+      ...list.map((o) => h('option', { value: o.id }, o.name)));
+    sel.addEventListener('change', () => { onChange(sel.value); requestRecompute(); });
+    refs.selects.set(name, sel);
+    return h('div', { class: 'field' },
+      h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, labelText)),
+      sel);
+  }
+
+  function revealBox(name, ...children) {
+    const box = h('div', { hidden: true }, ...children);
+    refs.reveals.set(name, box);
+    return box;
+  }
+
+  function specBlock(name) {
+    const el = h('div', { class: 'spec-block', hidden: true });
+    refs.specBlocks.set(name, el);
+    return el;
+  }
+
+  function warningSlot(name) {
+    const el = h('div', { class: 'compat-warn', hidden: true, role: 'status' });
+    refs.warnings.set(name, el);
+    return el;
+  }
+
+  function derivedSlot(name) {
+    const el = h('div', { class: 'derived' });
+    refs.derived.set(name, el);
+    return el;
+  }
+
+  function renderSpecBlock(name, rows) {
+    const el = refs.specBlocks.get(name);
+    if (!el) return;
+    if (!rows || !rows.length) { el.hidden = true; return; }
+    el.hidden = false;
+    el.replaceChildren(h('table', {},
+      h('tbody', {}, ...rows.map(([k, v]) => h('tr', {}, h('td', {}, k), h('td', {}, v))))));
+  }
+
+  function customNumber(name, key, opts = {}) {
+    const label = opts.label || key;
+    const input = h('input', {
+      type: 'number', class: 'num', step: opts.step || 'any', 'aria-label': label,
+    });
+    input.addEventListener('input', () => {
+      const v = activeValues();
+      v[key] = coerceField(key, parseFloat(input.value), v[key]);
+      requestRecompute();
+    });
+    refs.custom.set(name, { input, key });
+    return h('div', { class: 'field' },
+      h('div', { class: 'field-head' },
+        h('span', { class: 'field-label' }, label),
+        h('span', { class: 'field-inputs' }, input,
+          opts.unit ? h('span', { class: 'field-label' }, opts.unit) : null)));
+  }
+
+  let sectionSeq = 0;
+
+  function buildSection(id, label, bodyChildren) {
+    const bodyId = `section-body-${id}-${++sectionSeq}`;
+    const body = h('div', { class: 'section-body', id: bodyId }, ...bodyChildren);
+    const head = h('button', {
+      type: 'button', class: 'section-head', 'aria-expanded': 'false', 'aria-controls': bodyId,
+    }, h('span', { class: 'section-caret', 'aria-hidden': 'true' }, '▼'), label);
+
+    const section = h('section', { class: 'section collapsed', id: `section-${id}` },
+      h('h2', { class: 'section-heading' }, head), body);
+
+    head.addEventListener('click', () => {
+      const collapsed = section.classList.toggle('collapsed');
+      head.setAttribute('aria-expanded', String(!collapsed));
+    });
+
+    return section;
+  }
+
+  function openSection(id) {
+    const el = document.getElementById(`section-${id}`);
+    if (!el) return;
+    el.classList.remove('collapsed');
+    const head = el.querySelector('.section-head');
+    if (head) head.setAttribute('aria-expanded', 'true');
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.classList.remove('flash');
+    void el.offsetWidth;
+    el.classList.add('flash');
+  }
+
+  return { buildField, buildSection, customNumber, derivedSlot, fieldsFor, labelledSelect, openSection, renderSpecBlock, revealBox, specBlock, syncField, warningSlot };
+})();
+
+/* ==== panel.js ============================================================= */
+__M['panel'] = (function () {
+  const { h, $, toast } = __M['dom'];
+  const { state, activeValues, refs, requestRecompute, MAX_CONFIGS } = __M['state'];
+  const { buildField, syncField, fieldsFor, labelledSelect, revealBox, specBlock, warningSlot, derivedSlot, renderSpecBlock, customNumber, buildSection, openSection } = __M['fields'];
+  const { FRONT_CALIPERS, REAR_CALIPERS, MASTER_CYLINDERS, PADS, FRONT_ROTORS, REAR_ROTORS, DRIVER_WEIGHTS, EVENT_SPEEDS, AERO_PRESETS, DOWNFORCE_EQUATIONS, CONFIG_COLORS, PISTON_COUNTS, CALIPER_TYPES, padById, padCaliperWarning } = __M['components'];
+  const { SECTIONS, coerceField, activeEventSpeeds, primaryEventSpeed, applyFrontCaliper, applyRearCaliper, applyMasterCylinder, applyPad, applyRotor, applyAeroPreset, applyDriverWeight } = __M['config'];
+  const { UNITS, toDisplay, toCanonical, fmt } = __M['units'];
+
+  const IN_PER_MM = 1 / 25.4;
+
+  function updateActive(fn) {
+    const i = state.activeIndex;
+    state.configs[i].values = fn(state.configs[i].values);
+  }
+
+  function caliperSection(side) {
+    const isFront = side === 'front';
+    const catalogue = isFront ? FRONT_CALIPERS : REAR_CALIPERS;
+    const applyCaliper = isFront ? applyFrontCaliper : applyRearCaliper;
+    const boreKey = isFront ? 'frontCaliper' : 'rearCaliper';
+    const countKey = isFront ? 'frontCaliperNum' : 'rearCaliperNum';
+    const typeKey = isFront ? 'frontCaliperType' : 'rearCaliperType';
+    const muKey = isFront ? 'frontRotorMu' : 'rearRotorMu';
+
+    const pistonSel = h('select', { class: 'select', 'aria-label': 'Total piston count' },
+      ...PISTON_COUNTS.map((n) => h('option', { value: n }, `${n} pistons`)));
+    pistonSel.addEventListener('change', () => {
+      activeValues()[countKey] = parseInt(pistonSel.value, 10);
+      requestRecompute();
+    });
+    refs.selects.set(`${side}CaliperPistons`, pistonSel);
+
+    const typeSel = h('select', { class: 'select', 'aria-label': 'Caliper design' },
+      ...CALIPER_TYPES.map((t) => h('option', { value: t.id }, t.name)));
+    typeSel.addEventListener('change', () => {
+      activeValues()[typeKey] = typeSel.value;
+      requestRecompute();
+    });
+    refs.selects.set(`${side}CaliperType`, typeSel);
+
+    const boreInput = h('input', { type: 'number', class: 'num', step: '0.01', 'aria-label': 'Caliper bore' });
+    const boreUnit = h('select', { class: 'select select-unit', 'aria-label': 'Caliper bore unit' },
+      ...UNITS.length_mm.options.map((o) => h('option', { value: o.id }, o.label)));
+    boreInput.addEventListener('input', () => {
+      const v = activeValues();
+      const canonical = toCanonical('length_mm', v.units.length_mm, parseFloat(boreInput.value));
+      v[boreKey] = coerceField(boreKey, canonical, v[boreKey]);
+      requestRecompute();
+    });
+    boreUnit.addEventListener('change', () => {
+      activeValues().units.length_mm = boreUnit.value;
+      requestRecompute();
+    });
+    refs.custom.set(`${side}CaliperBore`, {
+      input: boreInput, key: boreKey, unitSel: boreUnit, family: 'length_mm',
+    });
+
+    const padSel = h('select', { class: 'select select-wide', 'aria-label': 'Brake pad' },
+      ...PADS.map((p) => h('option', { value: p.id }, p.name)));
+    padSel.addEventListener('change', () => {
+      updateActive((v) => applyPad(v, side, padSel.value));
+      requestRecompute();
+    });
+    refs.selects.set(`${side}Pad`, padSel);
+
+    const padMu = h('input', {
+      type: 'number', class: 'num', step: '0.005', 'aria-label': 'Pad friction coefficient',
+    });
+    padMu.addEventListener('input', () => {
+      const v = activeValues();
+      v[muKey] = coerceField(muKey, parseFloat(padMu.value), v[muKey]);
+      requestRecompute();
+    });
+    refs.custom.set(`${side}PadMu`, { input: padMu, key: muKey });
+
+    const inlineField = (label, ...controls) => h('div', { class: 'field' },
+      h('div', { class: 'field-head' },
+        h('span', { class: 'field-label' }, label),
+        h('span', { class: 'field-inputs' }, ...controls)));
+
+    return buildSection(`${side}-caliper`, `${isFront ? 'Front' : 'Rear'} caliper`, [
+      labelledSelect('Caliper', `${side}Caliper`, catalogue, (id) => {
+        updateActive((v) => applyCaliper(v, id));
+      }),
+      specBlock(`${side}Caliper`),
+      revealBox(`${side}CaliperCustom`,
+        inlineField('Bore', boreInput, boreUnit),
+        inlineField('Total piston count', pistonSel),
+        inlineField('Design', typeSel)),
+      h('div', { class: 'field' },
+        h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Brake pad')),
+        padSel),
+      inlineField('Pad friction coefficient (mu)', padMu),
+      warningSlot(`${side}Pad`),
+      derivedSlot(`${side}CaliperArea`),
+    ]);
+  }
+
+  function hydraulicsSection(side) {
+    const isFront = side === 'front';
+    return buildSection(`${side}-hydraulics`, `${isFront ? 'Front' : 'Rear'} hydraulics and rotor`, [
+      labelledSelect('Master cylinder', `${side}MC`, MASTER_CYLINDERS, (id) => {
+        updateActive((v) => applyMasterCylinder(v, side, id));
+      }),
+      revealBox(`${side}MCCustom`,
+        customNumber(`${side}MCBore`, isFront ? 'frontMC' : 'rearMC',
+          { label: 'MC bore', unit: 'in', step: 0.001 })),
+      derivedSlot(`${side}MC`),
+      labelledSelect('Rotor', `${side}Rotor`, isFront ? FRONT_ROTORS : REAR_ROTORS, (id) => {
+        updateActive((v) => applyRotor(v, side, id));
+      }),
+      ...fieldsFor(`${side}-hydraulics`).map(buildField),
+      derivedSlot(`${side}Rotor`),
+    ]);
+  }
+
+  function vehicleSection() {
+    const dwSel = h('select', { class: 'select select-wide', 'aria-label': 'Driver weight preset' },
+      ...DRIVER_WEIGHTS.map((d) => h('option', { value: d.id }, d.name)));
+    dwSel.addEventListener('change', () => {
+      updateActive((v) => applyDriverWeight(v, dwSel.value));
+      requestRecompute();
+    });
+    refs.selects.set('driverWeight', dwSel);
+
+    const all = fieldsFor('vehicle');
+    const driverField = all.find((f) => f.key === 'driverWeight');
+    const rest = all.filter((f) => f.key !== 'driverWeight');
+
+    return buildSection('vehicle', 'Vehicle and driver', [
+      h('div', { class: 'field' },
+        h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Driver weight preset')),
+        dwSel),
+      buildField(driverField),
+      h('p', { class: 'hint' },
+        'Rear weight bias and CG height are separate inputs. Changing driver weight moves total weight only.'),
+      ...rest.map(buildField),
+      derivedSlot('weight'),
+    ]);
+  }
+
+  function aeroSection() {
+    const eqSel = h('select', { class: 'select select-wide', 'aria-label': 'Downforce equation' },
+      ...DOWNFORCE_EQUATIONS.map((e) => h('option', { value: e.id }, e.name)));
+    eqSel.addEventListener('change', () => {
+      activeValues().downforceMode = eqSel.value;
+      requestRecompute();
+    });
+    refs.selects.set('downforceMode', eqSel);
+
+    const eqDetail = h('div', { class: 'derived' });
+    refs.derived.set('downforceDetail', eqDetail);
+
+    const presetSel = h('select', { class: 'select select-wide', 'aria-label': 'Aero preset' },
+      ...AERO_PRESETS.map((p) => h('option', { value: p.id }, p.name)));
+    presetSel.addEventListener('change', () => {
+      updateActive((v) => applyAeroPreset(v, presetSel.value));
+      requestRecompute();
+    });
+    refs.selects.set('aeroPreset', presetSel);
+
+    const varCp = h('input', { type: 'checkbox' });
+    varCp.addEventListener('change', () => {
+      activeValues().variableCP = varCp.checked;
+      requestRecompute();
+    });
+    refs.custom.set('variableCP', { input: varCp, key: 'variableCP' });
+
+    const aeroFields = fieldsFor('aero');
+
+    return buildSection('aero', 'Aerodynamics', [
+      h('div', { class: 'field' },
+        h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Downforce equation')),
+        eqSel),
+      eqDetail,
+      revealBox('aeroInputs',
+        h('div', { class: 'field' },
+          h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Preset')),
+          presetSel),
+        h('p', { class: 'hint' },
+          'The reference area is stated in every preset because a lift coefficient is only valid against the area it was measured on.'),
+        ...aeroFields.filter((f) => f.aeroOnly).map(buildField)),
+      h('div', { class: 'field' },
+        h('label', { class: 'check' }, varCp, ' Variable cp (centre of pressure moves with deceleration)')),
+      ...aeroFields.filter((f) => !f.aeroOnly).map(buildField),
+      derivedSlot('downforce'),
+    ]);
+  }
+
+  function goalSection() {
+    const eventList = h('div', { class: 'event-list' });
+
+    refs.eventRows = EVENT_SPEEDS.map((spec, i) => {
+      const chk = h('input', { type: 'checkbox' });
+      const numInput = spec.custom
+        ? h('input', { type: 'number', class: 'num num-tiny', step: '1', 'aria-label': 'Custom event speed in mph' })
+        : null;
+      const tag = h('span', { class: 'primary-tag' });
+
+      chk.addEventListener('change', () => {
+        activeValues().eventSpeeds[i].on = chk.checked;
+        requestRecompute();
+      });
+
+      if (numInput) {
+        numInput.addEventListener('input', () => {
+          const value = parseFloat(numInput.value);
+          if (Number.isFinite(value) && value > 0) {
+            activeValues().eventSpeeds[i].value = value;
+            requestRecompute();
+          }
+        });
+      }
+
+      eventList.append(h('label', { class: 'event-row' }, chk, spec.name, numInput, tag));
+      return { chk, numInput, tag };
+    });
+
+    return buildSection('goal', 'Goal band and event speeds', [
+      ...fieldsFor('goal').map(buildField),
+      h('div', { class: 'field' },
+        h('div', { class: 'field-head' }, h('span', { class: 'field-label' }, 'Event speeds')),
+        h('p', { class: 'hint' },
+          'More than one can be active. Each draws its own line on the plots and its own row in the results table. The first active one is the primary, and is what the optimizer targets.'),
+        eventList),
+    ]);
+  }
+
+  function buildPanel() {
+    $('sections').replaceChildren(
+      caliperSection('front'),
+      caliperSection('rear'),
+      hydraulicsSection('front'),
+      hydraulicsSection('rear'),
+      buildSection('pedal-box', 'Pedal box and bias', [
+        ...fieldsFor('pedal-box').map(buildField),
+        derivedSlot('bias'),
+      ]),
+      vehicleSection(),
+      aeroSection(),
+      buildSection('tire', 'Tire model', [
+        h('p', { class: 'hint' }, 'mu(Fz) = (a − b·Fz) · scale1 · scale2, with Fz the load on a single tire.'),
+        ...fieldsFor('tire').map(buildField),
+        derivedSlot('tire'),
+      ]),
+      goalSection());
+
+    const jump = $('jump-select');
+    jump.replaceChildren(
+      h('option', { value: '' }, 'Jump to a section'),
+      ...SECTIONS.map((s) => h('option', { value: s.id }, s.label)));
+    jump.addEventListener('change', () => {
+      if (jump.value) openSection(jump.value);
+      jump.value = '';
+    });
+  }
+
+  let configRows = [];
+
+  function paintActiveRow() {
+    configRows.forEach(({ row, tag }, i) => {
+      const isActive = i === state.activeIndex;
+      row.classList.toggle('active', isActive);
+      tag.hidden = !isActive;
+    });
+  }
+
+  function selectConfig(i) {
+    if (state.activeIndex === i) return;
+    state.activeIndex = i;
+    paintActiveRow();
+    syncPanel();
+  }
+
+  function renderConfigList() {
+    const list = $('config-list');
+    configRows = [];
+
+    list.replaceChildren(...state.configs.map((entry, i) => {
+      const select = () => selectConfig(i);
+
+      const nameInput = h('input', {
+        class: 'config-name', value: entry.name, 'aria-label': `Name of configuration ${i + 1}`,
+      });
+      nameInput.addEventListener('input', () => {
+        entry.name = nameInput.value;
+        requestRecompute();
+      });
+      nameInput.addEventListener('focus', select);
+
+      const enable = h('input', {
+        type: 'checkbox', 'aria-label': `Show ${entry.name} on the plots`,
+      });
+      enable.checked = entry.enabled;
+      enable.addEventListener('click', (e) => e.stopPropagation());
+      enable.addEventListener('change', () => {
+        entry.enabled = enable.checked;
+        requestRecompute();
+      });
+
+      const dup = h('button', {
+        type: 'button', class: 'btn-icon', title: 'Duplicate', 'aria-label': `Duplicate ${entry.name}`,
+      }, '⧉');
+      dup.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.configs.length >= MAX_CONFIGS) {
+          toast(`Maximum of ${MAX_CONFIGS} configurations.`);
+          return;
+        }
+        state.configs.splice(i + 1, 0, {
+          name: `${entry.name} copy`,
+          color: CONFIG_COLORS[state.configs.length % CONFIG_COLORS.length],
+          enabled: true,
+          values: structuredClone(entry.values),
+        });
+        state.activeIndex = i + 1;
+        renderConfigList();
+        syncPanel();
+        requestRecompute();
+      });
+
+      const del = h('button', {
+        type: 'button', class: 'btn-icon danger', title: 'Delete', 'aria-label': `Delete ${entry.name}`,
+      }, '✕');
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.configs.length === 1) {
+          toast('At least one configuration is required.');
+          return;
+        }
+        state.configs.splice(i, 1);
+        state.activeIndex = Math.min(state.activeIndex, state.configs.length - 1);
+        renderConfigList();
+        syncPanel();
+        requestRecompute();
+      });
+
+      const tag = h('span', { class: 'config-editing-tag' }, 'editing');
+
+      const row = h('div', { class: 'config-row' },
+        enable,
+        h('span', { class: 'config-swatch', style: `background:${entry.color}`, 'aria-hidden': 'true' }),
+        nameInput,
+        tag,
+        dup, del);
+
+      row.addEventListener('click', select);
+      configRows.push({ row, tag });
+      return row;
+    }));
+
+    paintActiveRow();
+
+    $('btn-add-config').disabled = state.configs.length >= MAX_CONFIGS;
+  }
+
+  function syncPanel() {
+    const v = activeValues();
+
+    for (const key of refs.fields.keys()) syncField(key, null);
+
+    const setSelect = (name, value) => {
+      const sel = refs.selects.get(name);
+      if (sel) sel.value = value;
+    };
+    const reveal = (name, on) => {
+      const box = refs.reveals.get(name);
+      if (box) box.hidden = !on;
+    };
+
+    setSelect('frontCaliper', v.frontCaliperId);
+    setSelect('rearCaliper', v.rearCaliperId);
+    setSelect('frontMC', v.frontMCId);
+    setSelect('rearMC', v.rearMCId);
+    setSelect('frontPad', v.frontPadId);
+    setSelect('rearPad', v.rearPadId);
+    setSelect('frontRotor', v.frontRotorId);
+    setSelect('rearRotor', v.rearRotorId);
+    setSelect('driverWeight', v.driverWeightId);
+    setSelect('downforceMode', v.downforceMode);
+    setSelect('aeroPreset', v.aeroPresetId);
+    setSelect('frontCaliperPistons', String(v.frontCaliperNum));
+    setSelect('rearCaliperPistons', String(v.rearCaliperNum));
+    setSelect('frontCaliperType', v.frontCaliperType);
+    setSelect('rearCaliperType', v.rearCaliperType);
+
+    const frontCal = FRONT_CALIPERS.find((c) => c.id === v.frontCaliperId);
+    const rearCal = REAR_CALIPERS.find((c) => c.id === v.rearCaliperId);
+
+    reveal('frontCaliperCustom', Boolean(frontCal && frontCal.custom));
+    reveal('rearCaliperCustom', Boolean(rearCal && rearCal.custom));
+    reveal('frontMCCustom', v.frontMCId === 'custom-mc');
+    reveal('rearMCCustom', v.rearMCId === 'custom-mc');
+    reveal('aeroInputs', v.downforceMode === 'clArea');
+
+    renderSpecBlock('frontCaliper', frontCal && !frontCal.custom ? frontCal.spec : null);
+    renderSpecBlock('rearCaliper', rearCal && !rearCal.custom ? rearCal.spec : null);
+
+    const setCustom = (name, value, family) => {
+      const c = refs.custom.get(name);
+      if (!c) return;
+      if (c.input.type === 'checkbox') { c.input.checked = Boolean(value); return; }
+      if (document.activeElement === c.input) return;
+      const unitId = family ? v.units[family] : null;
+      c.input.value = family ? Number(toDisplay(family, unitId, value).toFixed(4)) : value;
+      if (c.unitSel && unitId) c.unitSel.value = unitId;
+    };
+    setCustom('frontCaliperBore', v.frontCaliper, 'length_mm');
+    setCustom('rearCaliperBore', v.rearCaliper, 'length_mm');
+    setCustom('frontMCBore', v.frontMC);
+    setCustom('rearMCBore', v.rearMC);
+    setCustom('frontPadMu', v.frontRotorMu);
+    setCustom('rearPadMu', v.rearRotorMu);
+    setCustom('variableCP', v.variableCP);
+
+    const primary = activeEventSpeeds(v)[0];
+    refs.eventRows.forEach((row, i) => {
+      const e = v.eventSpeeds[i];
+      row.chk.checked = e.on;
+      if (row.numInput && document.activeElement !== row.numInput) row.numInput.value = e.value;
+      row.tag.textContent = e === primary ? 'primary' : '';
+    });
+
+    const setWarning = (name, message) => {
+      const el = refs.warnings.get(name);
+      if (!el) return;
+      el.hidden = !message;
+      el.textContent = message || '';
+    };
+    setWarning('frontPad', padCaliperWarning(padById(v.frontPadId), frontCal));
+    setWarning('rearPad', padCaliperWarning(padById(v.rearPadId), rearCal));
+
+    const eq = DOWNFORCE_EQUATIONS.find((e) => e.id === v.downforceMode);
+    const detail = refs.derived.get('downforceDetail');
+    if (detail && eq) detail.textContent = eq.detail;
+  }
+
+  function syncDerived(result) {
+    const v = activeValues();
+    const write = (name, html) => {
+      const el = refs.derived.get(name);
+      if (el) el.innerHTML = html;
+    };
+
+    const pistonArea = (bore, count) => count * Math.PI * Math.pow((bore * IN_PER_MM) / 2, 2);
+    const boreArea = (bore) => Math.PI * Math.pow(bore / 2, 2);
+    const annulusMm = (od, id) => ((od - id) / 2) / IN_PER_MM;
+
+    write('frontCaliperArea',
+      `Total piston area <strong>${fmt(pistonArea(v.frontCaliper, v.frontCaliperNum), 4)} in²</strong> · pad mu <strong>${fmt(v.frontRotorMu, 3)}</strong>`);
+    write('rearCaliperArea',
+      `Total piston area <strong>${fmt(pistonArea(v.rearCaliper, v.rearCaliperNum), 4)} in²</strong> · pad mu <strong>${fmt(v.rearRotorMu, 3)}</strong>`);
+
+    write('frontMC', `Bore area <strong>${fmt(boreArea(v.frontMC), 4)} in²</strong>`);
+    write('rearMC', `Bore area <strong>${fmt(boreArea(v.rearMC), 4)} in²</strong>`);
+
+    write('frontRotor',
+      `Effective radius (OD+ID)/4 = <strong>${fmt((v.frontRotorOD + v.frontRotorID) / 4, 4)} in</strong> · annulus <strong>${fmt(annulusMm(v.frontRotorOD, v.frontRotorID), 1)} mm</strong>`);
+    write('rearRotor',
+      `Effective radius (OD+ID)/4 = <strong>${fmt((v.rearRotorOD + v.rearRotorID) / 4, 4)} in</strong> · annulus <strong>${fmt(annulusMm(v.rearRotorOD, v.rearRotorID), 1)} mm</strong>`);
+
+    write('bias',
+      `Effective brake bias (rear share) = <strong>${fmt(result.effectiveBrakeBias, 5)}</strong><br>frontTotal <strong>${fmt(result.frontTotal, 3)}</strong> · rearTotal <strong>${fmt(result.rearTotal, 3)}</strong>`);
+
+    write('weight',
+      `Total <strong>${fmt(result.weight, 1)} lbf</strong> · front <strong>${fmt(result.weightFront, 1)}</strong> · rear <strong>${fmt(result.weightRear, 1)}</strong>`);
+
+    const ev = primaryEventSpeed(v);
+    const idx = Math.round(ev);
+    const downforce = idx < result.downforce.length ? result.downforce[idx] : 0;
+    write('downforce',
+      `Downforce at ${ev} mph = <strong>${fmt(downforce, 1)}</strong> · cp at that speed = <strong>${result.converged[idx] ? fmt(result.cpValues[idx], 4) : 'n/a'}</strong>`);
+
+    const muAt = (Fz) => (v.tireA - v.tireB * Fz) * v.tireScale1 * v.tireScale2;
+    write('tire',
+      `mu at 100 lbf <strong>${fmt(muAt(100), 4)}</strong> · at 200 lbf <strong>${fmt(muAt(200), 4)}</strong> · at 400 lbf <strong>${fmt(muAt(400), 4)}</strong>`);
+  }
+
+  return { buildPanel, renderConfigList, syncDerived, syncPanel };
+})();
+
+/* ==== charts.js ============================================================ */
+__M['charts'] = (function () {
+  const { h, $ } = __M['dom'];
+  const { state, activeValues, requestRecompute } = __M['state'];
+  const { solve } = __M['solver'];
+  const { primaryEventSpeed } = __M['config'];
+  const { sweepParameter } = __M['optimize'];
+  const { Chart, specBoxFor, pedalForceSpec, decelerationSpec, torqueSpec, linePressureSpec, sweepSpec } = __M['plots'];
+
+  const charts = new Map();
+
+  const FIXED_PLOTS = ['pedal', 'decel'];
+
+  const PLOT_TITLES = {
+    pedal: 'Pedal force to lock up',
+    decel: 'Deceleration vs speed',
+    torque: 'Brake torque vs speed',
+    pressure: 'Line pressure at lockup vs speed',
+    biasSweep: 'Bias sweep at the primary event speed',
+    driverSweep: 'Driver weight sensitivity',
+  };
+
+  function plotCard(id, title) {
+    const canvas = h('canvas', {
+      id: `canvas-${id}`,
+      role: 'img',
+      'aria-label': `${title}. The same values are listed in the results table below.`,
+    });
+
+    const png = h('button', { type: 'button', class: 'btn', 'aria-label': `Download ${title} as PNG` }, 'PNG');
+    png.addEventListener('click', () => {
+      const chart = charts.get(id);
+      if (chart) chart.toPNG(`b27-${id}.png`);
+    });
+
+    const actions = h('div', { class: 'plot-actions' }, png);
+
+    if (!FIXED_PLOTS.includes(id)) {
+      const close = h('button', {
+        type: 'button', class: 'btn-icon danger', title: 'Remove plot', 'aria-label': `Remove ${title}`,
+      }, '✕');
+      close.addEventListener('click', () => {
+        state.view.extraPlots = state.view.extraPlots.filter((p) => p !== id);
+        requestRecompute();
+      });
+      actions.append(close);
+    }
+
+    const card = h('div', { class: 'plot-card', id: `plot-${id}` },
+      h('div', { class: 'plot-head' }, h('span', { class: 'plot-title' }, title), actions),
+      h('div', { class: 'plot-canvas-wrap' }, canvas));
+
+    return { card, canvas };
+  }
+
+  function ensureChart(id, container) {
+    let chart = charts.get(id);
+    if (!chart) {
+      const { card, canvas } = plotCard(id, PLOT_TITLES[id]);
+      container.append(card);
+      chart = new Chart(canvas);
+      charts.set(id, chart);
+    } else {
+      container.append(chart.canvas.closest('.plot-card'));
+    }
+    chart.showSpecBox = state.view.specBox;
+    return chart;
+  }
+
+  function biasSweepSpec(v) {
+    const ev = primaryEventSpeed(v);
+    const sweep = sweepParameter(v, 'biasBarFrontBias', ev, 81);
+    const inBand = sweep.filter((p) => p.converged && p.inBand);
+    const best = inBand.length ? inBand.reduce((a, b) => (b.gap < a.gap ? b : a)) : null;
+
+    return sweepSpec(sweep, v, {
+      title: `Bias sweep at ${ev} mph`,
+      xLabel: 'Bias bar front bias',
+      xTipLabel: 'bias',
+      xTipDecimals: 3,
+      currentX: v.biasBarFrontBias,
+      currentLabel: v.biasBarFrontBias.toFixed(3),
+      optimumX: best ? best.x : null,
+    });
+  }
+
+  function driverSweepSpec(v) {
+    const ev = primaryEventSpeed(v);
+    const idx = Math.round(ev);
+    const sweep = [];
+
+    for (let w = 100; w <= 250; w += 2.5) {
+      const r = solve({ ...v, driverWeight: w, topSpeed: Math.max(1, Math.ceil(ev)) });
+      if (!r.converged[idx]) {
+        sweep.push({ x: w, converged: false });
+        continue;
+      }
+      sweep.push({
+        x: w,
+        converged: true,
+        front: r.frontPedalForce[idx],
+        rear: r.rearPedalForce[idx],
+        gap: Math.abs(r.frontPedalForce[idx] - r.rearPedalForce[idx]),
+        inBand: false,
+      });
+    }
+
+    return sweepSpec(sweep, v, {
+      title: `Driver weight sensitivity at ${ev} mph`,
+      xLabel: 'Driver weight (lb)',
+      xTipLabel: 'weight',
+      xTipDecimals: 0,
+      currentX: v.driverWeight,
+      currentLabel: `${v.driverWeight} lb`,
+      optimumX: null,
+    });
+  }
+
+  function renderPlots(solved) {
+    const container = $('plots');
+    const v = activeValues();
+    const yOverride = state.view.manualAxis
+      ? { min: state.view.axisMin, max: state.view.axisMax }
+      : null;
+    const specBox = state.view.specBox
+      ? specBoxFor(v, solved.length ? solved[0].result : null)
+      : null;
+
+    for (const chart of charts.values()) {
+      const card = chart.canvas.closest('.plot-card');
+      if (card && card.parentNode) card.parentNode.removeChild(card);
+    }
+
+    const wanted = [...FIXED_PLOTS, ...state.view.extraPlots];
+    for (const [id, chart] of [...charts.entries()]) {
+      if (!wanted.includes(id)) {
+        chart.destroy();
+        charts.delete(id);
+      }
+    }
+
+    if (!solved.length) {
+      container.replaceChildren(
+        h('p', { class: 'hint' }, 'No configurations are enabled. Tick one in the panel to plot it.'));
+      return;
+    }
+
+    ensureChart('pedal', container).setSpec(pedalForceSpec(solved, v, { specBox, yOverride }));
+    ensureChart('decel', container).setSpec(decelerationSpec(solved, v, { specBox }));
+
+    for (const id of state.view.extraPlots) {
+      const chart = ensureChart(id, container);
+      if (id === 'torque') chart.setSpec(torqueSpec(solved, v, { specBox }));
+      else if (id === 'pressure') chart.setSpec(linePressureSpec(solved, v, { specBox }));
+      else if (id === 'biasSweep') chart.setSpec(biasSweepSpec(v));
+      else if (id === 'driverSweep') chart.setSpec(driverSweepSpec(v));
+    }
+  }
+
+  function setSpecBoxVisible(on) {
+    for (const chart of charts.values()) chart.showSpecBox = on;
+  }
+
+  function redrawCharts() {
+    for (const chart of charts.values()) chart.draw();
+  }
+
+  return { PLOT_TITLES, redrawCharts, renderPlots, setSpecBoxVisible };
+})();
+
+/* ==== results.js =========================================================== */
+__M['results'] = (function () {
+  const { h, $, toast } = __M['dom'];
+  const { state, activeValues, requestRecompute } = __M['state'];
+  const { openSection } = __M['fields'];
+  const { syncPanel } = __M['panel'];
+  const { activeEventSpeeds } = __M['config'];
+  const { OPTIMIZABLE, describeValue, applyCandidate } = __M['optimize'];
+  const { Chart, objectiveSpec, sweepSpec } = __M['plots'];
+  const { fmt } = __M['units'];
+
+  const NO_VALUE = 'n/a';
+
+  function renderValidation(issues) {
+    const box = $('validation');
+
+    if (!issues.length) {
+      box.replaceChildren(h('div', { class: 'issue issue-ok' },
+        h('span', { class: 'issue-tag' }, 'OK'),
+        h('span', {}, 'No issues. Every speed converged and both axles sit inside the goal band at each active event speed.')));
+      return;
+    }
+
+    const rank = { error: 0, warn: 1 };
+    const sorted = [...issues].sort((a, b) => (rank[a.level] ?? 2) - (rank[b.level] ?? 2));
+
+    box.replaceChildren(...sorted.map((issue) => {
+      let jump = null;
+      if (issue.section) {
+        jump = h('button', { type: 'button', class: 'issue-jump' }, 'go to input');
+        jump.addEventListener('click', () => openSection(issue.section));
+      }
+      return h('div', { class: `issue issue-${issue.level}` },
+        h('span', { class: 'issue-tag' }, issue.level === 'error' ? 'Error' : 'Check'),
+        h('span', {}, issue.message),
+        jump);
+    }));
+  }
+
+  function renderResultsTable(solved) {
+    const wrap = $('results-table');
+    const rows = [];
+
+    for (const { entry, result } of solved) {
+      for (const ev of activeEventSpeeds(entry.values)) {
+        const idx = Math.round(ev.value);
+        const solvedHere = idx >= 0 && idx < result.speeds.length && result.converged[idx];
+        const front = solvedHere ? result.frontPedalForce[idx] : null;
+        const rear = solvedHere ? result.rearPedalForce[idx] : null;
+        const { goalLowerLimit: lo, goalUpperLimit: hi } = entry.values;
+        const inBand = solvedHere && front >= lo && front <= hi && rear >= lo && rear <= hi;
+        const bandClass = solvedHere ? (inBand ? 'in-band' : 'out-band') : '';
+
+        rows.push(h('tr', {},
+          h('td', {},
+            h('span', { class: 'cell-swatch', style: `background:${entry.color}`, 'aria-hidden': 'true' }),
+            entry.name),
+          h('td', {}, String(ev.value)),
+          h('td', {}, solvedHere ? fmt(front, 1) : NO_VALUE),
+          h('td', {}, solvedHere ? fmt(rear, 1) : NO_VALUE),
+          h('td', { class: bandClass }, solvedHere ? fmt(Math.abs(front - rear), 1) : NO_VALUE),
+          h('td', {}, solvedHere ? fmt(result.deceleration[idx], 3) : NO_VALUE),
+          h('td', {}, solvedHere ? (result.lockFront[idx] ? 'front' : 'rear') : NO_VALUE),
+          h('td', { class: bandClass },
+            solvedHere ? (inBand ? 'in band' : 'outside') : 'no solve')));
+      }
+    }
+
+    if (!rows.length) {
+      wrap.replaceChildren(
+        h('p', { class: 'hint' }, 'No enabled configuration has an active event speed.'));
+      return;
+    }
+
+    const headings = ['Configuration', 'Speed (mph)', 'Front (lbf)', 'Rear (lbf)',
+      'Gap (lbf)', 'Decel (g)', 'Locks first', 'Goal band'];
+
+    wrap.replaceChildren(h('table', { class: 'data' },
+      h('caption', { class: 'sr-only' }, 'Pedal force, deceleration and lockup axle at each active event speed'),
+      h('thead', {}, h('tr', {}, ...headings.map((t) => h('th', { scope: 'col' }, t)))),
+      h('tbody', {}, ...rows)));
+  }
+
+  const stat = (label, value) => h('div', { class: 'opt-stat' },
+    h('span', { class: 'k' }, label), h('span', { class: 'v' }, value));
+
+  function appendSweepChart(container, title, filename, spec) {
+    const canvas = h('canvas', {
+      class: 'short', role: 'img',
+      'aria-label': `${title}. Key values are stated in the summary above.`,
+    });
+    const png = h('button', { type: 'button', class: 'btn', 'aria-label': `Download ${title} as PNG` }, 'PNG');
+
+    container.append(h('div', { class: 'plot-card sweep-card' },
+      h('div', { class: 'plot-head' },
+        h('span', { class: 'plot-title' }, title),
+        h('div', { class: 'plot-actions' }, png)),
+      h('div', { class: 'plot-canvas-wrap' }, canvas)));
+
+    const chart = new Chart(canvas);
+    chart.setSpec(spec);
+    png.addEventListener('click', () => chart.toPNG(filename));
+  }
+
+  function renderOptimizer() {
+    const box = $('optimizer-result');
+    const res = state.lastOptimization;
+
+    if (!res) { box.replaceChildren(); return; }
+
+    const decimals = (OPTIMIZABLE.find((o) => o.key === res.key) || {}).decimals ?? 4;
+    const parts = [];
+
+    if (res.status === 'ok') {
+      const best = res.best;
+      parts.push(
+        h('div', { class: 'opt-verdict ok' },
+          h('h3', {}, `${res.label} = ${describeValue(res.key, best.x, decimals)}`),
+          h('p', {}, res.message)),
+        h('div', { class: 'opt-numbers' },
+          stat('Front', `${fmt(best.front, 1)} lbf`),
+          stat('Rear', `${fmt(best.rear, 1)} lbf`),
+          stat('Gap', `${fmt(best.gap, 2)} lbf`),
+          stat('Deceleration', `${fmt(best.decel, 3)} g`),
+          stat('Goal band', 'inside')));
+
+      const apply = h('button', { type: 'button', class: 'btn btn-primary' }, 'Apply to this configuration');
+      apply.addEventListener('click', () => {
+        const i = state.activeIndex;
+        state.configs[i].values = applyCandidate(state.configs[i].values, res.key, best.x);
+        syncPanel();
+        requestRecompute();
+        toast(`Applied ${res.label} = ${describeValue(res.key, best.x, decimals)}`);
+      });
+      parts.push(h('div', { class: 'opt-actions' }, apply));
+    } else if (res.status === 'none-in-band') {
+      const closest = res.closest;
+      parts.push(
+        h('div', { class: 'opt-verdict fail' },
+          h('h3', {}, 'No value lands inside the goal band'),
+          h('p', {}, res.message)),
+        h('div', { class: 'opt-numbers' },
+          stat('Closest value', describeValue(res.key, closest.x, decimals)),
+          stat('Front', `${fmt(closest.front, 1)} lbf`),
+          stat('Rear', `${fmt(closest.rear, 1)} lbf`),
+          stat('Misses band by', `${fmt(closest.violation, 1)} lbf`),
+          stat('Deceleration', `${fmt(closest.decel, 3)} g`)));
+
+      if (res.tightest) {
+        const t = res.tightest;
+        parts.push(h('div', { class: 'opt-fallback' },
+          'Tightest balance available, for reference only: ',
+          h('strong', {}, describeValue(res.key, t.x, decimals)),
+          ` gives a gap of ${fmt(t.gap, 2)} lbf at ${fmt(t.front, 1)}/${fmt(t.rear, 1)} lbf, which is `,
+          h('strong', {}, 'outside the goal band'),
+          '. It is not a valid answer. Change a different parameter first.'));
+      }
+    } else {
+      parts.push(h('div', { class: 'opt-verdict fail' },
+        h('h3', {}, 'No solution'), h('p', {}, res.message)));
+    }
+
+    box.replaceChildren(h('div', { class: 'opt-result' }, ...parts));
+
+    const optimumX = res.status === 'ok' ? res.best.x : (res.closest ? res.closest.x : null);
+    const shared = {
+      xLabel: res.label,
+      xTipLabel: res.label,
+      xTipDecimals: decimals,
+      currentX: res.currentValue,
+      optimumX,
+    };
+
+    appendSweepChart(box, `Objective across ${res.label}`, `b27-optimize-${res.key}.png`,
+      objectiveSpec(res.sweep, activeValues(), {
+        ...shared, title: `Front/rear gap at ${res.eventSpeed} mph`,
+      }));
+
+    appendSweepChart(box, 'Front and rear pedal force across the search range',
+      `b27-optimize-forces-${res.key}.png`,
+      sweepSpec(res.sweep, activeValues(), {
+        ...shared, title: `Pedal force vs ${res.label} at ${res.eventSpeed} mph`,
+      }));
+  }
+
+  return { renderOptimizer, renderResultsTable, renderValidation };
+})();
+
+/* ==== ui.js ================================================================ */
+__M['ui'] = (function () {
+  const { $, fillSelect, toast } = __M['dom'];
+  const { state, activeValues, setRecompute, recomputeNow, MAX_CONFIGS } = __M['state'];
+  const { buildPanel, renderConfigList, syncPanel, syncDerived } = __M['panel'];
+  const { renderPlots, setSpecBoxVisible, redrawCharts } = __M['charts'];
+  const { renderValidation, renderResultsTable, renderOptimizer } = __M['results'];
+  const { solve } = __M['solver'];
+  const { initialConfigs, makeConfigEntry, validate } = __M['config'];
+  const { CONFIG_COLORS } = __M['components'];
+  const { optimize, OPTIMIZABLE } = __M['optimize'];
+  const { writeFragment, readFragment, toCSV, downloadText, copyToClipboard } = __M['share'];
+
+  const solveEnabled = () => state.configs
+    .filter((entry) => entry.enabled)
+    .map((entry) => ({ entry, result: solve(entry.values) }));
+
+  function recompute() {
+    const solved = solveEnabled();
+    const activeResult = solve(activeValues());
+
+    syncDerived(activeResult);
+    renderValidation(validate(activeValues(), activeResult));
+    renderPlots(solved);
+    renderResultsTable(solved);
+    writeFragment(state.configs, state.view);
+  }
+
+  function bindOptimizer() {
+    fillSelect($('opt-param'), OPTIMIZABLE.map((o) => ({ id: o.key, name: o.label })));
+
+    $('btn-optimize').addEventListener('click', () => {
+      const key = $('opt-param').value;
+      const btn = $('btn-optimize');
+      btn.disabled = true;
+      btn.textContent = 'Solving';
+
+      setTimeout(() => {
+        try {
+          state.lastOptimization = optimize(activeValues(), key);
+          renderOptimizer();
+        } catch (err) {
+          toast(`Optimization failed: ${err.message}`);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Solve';
+        }
+      }, 0);
+    });
+  }
+
+  function bindPlotControls() {
+    const specBox = $('chk-specbox');
+    const manualAxis = $('chk-manual-axis');
+    const axisMin = $('axis-min');
+    const axisMax = $('axis-max');
+
+    specBox.checked = state.view.specBox;
+    manualAxis.checked = state.view.manualAxis;
+    axisMin.value = state.view.axisMin;
+    axisMax.value = state.view.axisMax;
+    $('manual-axis-fields').hidden = !state.view.manualAxis;
+
+    specBox.addEventListener('change', (e) => {
+      state.view.specBox = e.target.checked;
+      setSpecBoxVisible(e.target.checked);
+      recomputeNow();
+    });
+
+    manualAxis.addEventListener('change', (e) => {
+      state.view.manualAxis = e.target.checked;
+      $('manual-axis-fields').hidden = !e.target.checked;
+      recomputeNow();
+    });
+
+    for (const [input, key] of [[axisMin, 'axisMin'], [axisMax, 'axisMax']]) {
+      input.addEventListener('input', (e) => {
+        const value = parseFloat(e.target.value);
+        if (Number.isFinite(value)) {
+          state.view[key] = value;
+          recomputeNow();
+        }
+      });
+    }
+
+    $('add-plot').addEventListener('change', (e) => {
+      const id = e.target.value;
+      if (id && !state.view.extraPlots.includes(id)) {
+        state.view.extraPlots.push(id);
+        recomputeNow();
+      }
+      e.target.value = '';
+    });
+  }
+
+  function bindToolbar() {
+    $('btn-add-config').addEventListener('click', () => {
+      if (state.configs.length >= MAX_CONFIGS) {
+        toast(`Maximum of ${MAX_CONFIGS} configurations.`);
+        return;
+      }
+      const color = CONFIG_COLORS[state.configs.length % CONFIG_COLORS.length];
+      state.configs.push(makeConfigEntry(`Config ${state.configs.length + 1}`, color));
+      state.activeIndex = state.configs.length - 1;
+      renderConfigList();
+      syncPanel();
+      recomputeNow();
+    });
+
+    $('btn-share').addEventListener('click', async () => {
+      const url = writeFragment(state.configs, state.view);
+      const copied = await copyToClipboard(url);
+      toast(copied
+        ? 'Shareable link copied to the clipboard.'
+        : 'Could not copy. The link is in the address bar.');
+    });
+
+    $('btn-csv').addEventListener('click', () => {
+      const solved = solveEnabled();
+      if (!solved.length) {
+        toast('Enable at least one configuration first.');
+        return;
+      }
+      downloadText('b27-brake-results.csv', toCSV(solved));
+      toast('CSV exported.');
+    });
+
+    $('btn-reset').addEventListener('click', () => {
+      state.configs = initialConfigs(CONFIG_COLORS);
+      state.activeIndex = 0;
+      state.lastOptimization = null;
+      renderConfigList();
+      syncPanel();
+      renderOptimizer();
+      recomputeNow();
+      toast('Reset to the values in brakescript_w_aero_B27.m');
+    });
+  }
+
+  function init() {
+    setRecompute(recompute);
+    buildPanel();
+
+    const restored = readFragment();
+    if (restored) {
+      state.configs = restored.configs;
+      state.activeIndex = 0;
+      state.view = { ...state.view, ...restored.view };
+      toast('Loaded configuration from link.');
+    }
+
+    renderConfigList();
+    syncPanel();
+    bindOptimizer();
+    bindPlotControls();
+    bindToolbar();
+
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(redrawCharts, 120);
+    });
+
+    recompute();
+  }
+
+  init();
+
+  return {  };
+})();
+
+})();
+</script>
+</body>
+</html>
