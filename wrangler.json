@@ -1,0 +1,8 @@
+{
+  "name": "bfr-b27-brake-script-simulator",
+  "compatibility_date": "2026-06-21",
+  "assets": {
+    "directory": "./",
+    "not_found_handling": "404-page"
+  }
+}
