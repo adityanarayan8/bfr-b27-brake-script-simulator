@@ -1,2 +1,9 @@
+.git
+.git/**
+.gitignore
+.assetsignore
+wrangler.json
+package.json
+README.md
 test
 tools
