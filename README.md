@@ -2,11 +2,11 @@
 
 ## **Deployment**
 
-The application is deployed as a static site on Cloudflare Pages.
+The application is deployed as a static site on Cloudflare Workers.
 **Production URL:**
 
 ```text
-https://bfr-b27-brake-script-simulator.pages.dev
+https://bfr-b27-brake-script-simulator.aditya-narayan-4be.workers.dev
 ```
 
 Browser implementation of the Berkeley Formula Racing brake model from `brakescript_w_aero_B27.m`. The simulator evaluates brake bias, tire loading, deceleration, pedal force, brake torque, hydraulic line pressure, and lockup behavior across vehicle speed while allowing multiple brake configurations to be compared on the same plots.
